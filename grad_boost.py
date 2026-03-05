@@ -99,6 +99,7 @@ class DirectForecaster:
         X : array-like, shape (n_samples, n_features)
             Признаки для предсказания
         """
+        X = prepare_single_window_features(X)
         if not self.is_fitted:
             raise ValueError("Модель еще не обучена!")
 
@@ -224,7 +225,7 @@ def prepare_volatility_features(
         if include_volume:
             for period in [5, 10, 20]:
                 data[f'volume_sma_{period}'] = data['volume'].rolling(window=period, min_periods=1).mean()
-    data[f'volume_ratio_{period}'] = data['volume'] / (data[f'volume_sma_{period}'] + epsilon)
+                data[f'volume_ratio_{period}'] = data['volume'] / (data[f'volume_sma_{period}'] + epsilon)
 
     # Макро-состояние
     for period in [10, 20]:
@@ -314,6 +315,185 @@ def prepare_volatility_features(
     return X, y, feature_names
 
 
+def prepare_single_window_features(
+        df_window: pd.DataFrame,
+        include_volume: bool = True,
+        add_rolling: bool = True,
+        epsilon: float = 1e-10
+) -> np.ndarray:
+    """
+    Преобразует ОДИН датафрейм с 20 свечами в фичи для предсказания.
+
+    Parameters:
+    -----------
+    df_window : pd.DataFrame
+        Датафрейм с 20 строками и колонками ['open', 'high', 'low', 'close', 'volume']
+    include_volume : bool
+        Использовать ли объём в фичах
+    add_rolling : bool
+        Добавлять ли скользящие статистики (требует больше данных внутри окна)
+    epsilon : float
+        Для защиты от деления на ноль
+
+    Returns:
+    --------
+    np.ndarray
+        Вектор фичей длиной (n_features,)
+    """
+
+    # Проверяем, что пришло ровно 20 свечей
+    if len(df_window) != 20:
+        raise ValueError(f"Ожидается 20 свечей, получено {len(df_window)}")
+
+    # Копируем, чтобы не портить оригинал
+    data = df_window.copy()
+
+    # Проверяем наличие необходимых колонок
+    required = ['open', 'high', 'low', 'close']
+    if include_volume:
+        required.append('volume')
+
+    for col in required:
+        if col not in data.columns:
+            raise ValueError(f"Колонка '{col}' не найдена в DataFrame")
+
+    # === 1. Базовые фичи (расчёт на всём окне) ===
+
+    # True Range
+    data['high_low'] = data['high'] - data['low']
+
+    # Для первой свечи нет предыдущей, берём её же (или 0)
+    prev_close = data['close'].shift(1)
+    prev_close.iloc[0] = data['close'].iloc[0]  # для первой свечи
+
+    data['high_close_prev'] = abs(data['high'] - prev_close)
+    data['low_close_prev'] = abs(data['low'] - prev_close)
+    data['TR'] = data[['high_low', 'high_close_prev', 'low_close_prev']].max(axis=1)
+
+    # Простой диапазон
+    data['range'] = data['high'] - data['low']
+
+    # Доходности
+    data['return'] = np.log(data['close'] / data['close'].shift(1))
+    data['return'].iloc[0] = 0  # для первой свечи
+    data['abs_return'] = abs(data['return'])
+    data['return_squared'] = data['return'] ** 2
+
+    # Структура свечи
+    data['body'] = abs(data['close'] - data['open'])
+    data['upper_shadow'] = data['high'] - data[['open', 'close']].max(axis=1)
+    data['lower_shadow'] = data[['open', 'close']].min(axis=1) - data['low']
+    data['body_to_range'] = data['body'] / (data['range'] + epsilon)
+    data['shadow_to_body'] = (data['upper_shadow'] + data['lower_shadow']) / (data['body'] + epsilon)
+
+    # Позиция закрытия
+    data['close_position'] = (data['close'] - data['low']) / (data['range'] + epsilon)
+
+    # Гэпы
+    data['gap'] = data['open'] - data['close'].shift(1)
+    data['gap'].iloc[0] = 0
+    data['abs_gap'] = abs(data['gap'])
+
+    # === 2. Объёмные фичи ===
+    if include_volume:
+        data['log_volume'] = np.log(data['volume'] + 1)
+        data['volume_TR'] = data['volume'] * data['TR']
+        data['volume_range'] = data['volume'] * data['range']
+
+    # === 3. Скользящие статистики (на маленьком окне — приближённо) ===
+    if add_rolling:
+        # Используем expanding вместо rolling, так как окно маленькое
+        # ATR-like
+        data['ATR_5'] = data['TR'].rolling(window=min(5, len(data)), min_periods=1).mean()
+        data['ATR_10'] = data['TR'].rolling(window=min(10, len(data)), min_periods=1).mean()
+        data['ATR_20'] = data['TR'].rolling(window=min(20, len(data)), min_periods=1).mean()
+
+        data['TR_vs_ATR_5'] = data['TR'] / (data['ATR_5'] + epsilon)
+        data['TR_vs_ATR_10'] = data['TR'] / (data['ATR_10'] + epsilon)
+        data['TR_vs_ATR_20'] = data['TR'] / (data['ATR_20'] + epsilon)
+
+        # Стандартное отклонение доходностей
+        data['return_std_5'] = data['return'].rolling(window=min(5, len(data)), min_periods=1).std()
+        data['return_std_10'] = data['return'].rolling(window=min(10, len(data)), min_periods=1).std()
+        data['return_std_20'] = data['return'].rolling(window=min(20, len(data)), min_periods=1).std()
+
+        data['abs_return_sma_5'] = data['abs_return'].rolling(window=min(5, len(data)), min_periods=1).mean()
+        data['abs_return_sma_10'] = data['abs_return'].rolling(window=min(10, len(data)), min_periods=1).mean()
+        data['abs_return_sma_20'] = data['abs_return'].rolling(window=min(20, len(data)), min_periods=1).mean()
+
+    # Объёмные скользящие
+    if include_volume:
+        data['volume_sma_5'] = data['volume'].rolling(window=min(5, len(data)), min_periods=1).mean()
+        data['volume_sma_10'] = data['volume'].rolling(window=min(10, len(data)), min_periods=1).mean()
+        data['volume_sma_20'] = data['volume'].rolling(window=min(20, len(data)), min_periods=1).mean()
+
+        data['volume_ratio_5'] = data['volume'] / (data['volume_sma_5'] + epsilon)
+        data['volume_ratio_10'] = data['volume'] / (data['volume_sma_10'] + epsilon)
+        data['volume_ratio_20'] = data['volume'] / (data['volume_sma_20'] + epsilon)
+
+    # Макро-состояние (на доступных данных)
+    for period in [10, 20]:
+        if period <= len(data):
+            data[f'dist_from_high_{period}'] = (data['high'].rolling(window=period, min_periods=1).max() - data[
+                'close']) / (data['range'] + epsilon)
+            data[f'dist_from_low_{period}'] = (data['close'] - data['low'].rolling(window=period, min_periods=1).min()) / (
+                        data['range'] + epsilon)
+        else:
+            data[f'dist_from_high_{period}'] = 0
+            data[f'dist_from_low_{period}'] = 0
+
+    # Полосы Боллинджера
+    if len(data) >= 20:
+        sma = data['close'].rolling(window=20, min_periods=1).mean()
+        std = data['close'].rolling(window=20, min_periods=1).std()
+        data['bb_width_20'] = (sma + 2 * std - (sma - 2 * std)) / (sma + epsilon)
+    else:
+        data['bb_width_20'] = 0
+
+    # === 4. Формируем список фичей в правильном порядке ===
+    # ВАЖНО: порядок должен строго соответствовать порядку из обучающей функции!
+
+    base_features = [
+        'TR', 'range', 'return', 'abs_return', 'return_squared',
+        'body', 'upper_shadow', 'lower_shadow', 'body_to_range',
+        'shadow_to_body', 'close_position', 'gap', 'abs_gap'
+    ]
+
+    if include_volume:
+        base_features.extend(['log_volume', 'volume_TR', 'volume_range'])
+
+    if add_rolling:
+        rolling_features = [
+            'ATR_5', 'ATR_10', 'ATR_20',
+            'TR_vs_ATR_5', 'TR_vs_ATR_10', 'TR_vs_ATR_20',
+            'return_std_5', 'return_std_10', 'return_std_20',
+            'abs_return_sma_5', 'abs_return_sma_10', 'abs_return_sma_20',
+            'dist_from_high_10', 'dist_from_high_20',
+            'dist_from_low_10', 'dist_from_low_20',
+            'bb_width_20'
+        ]
+        if include_volume:
+            rolling_features.extend(['volume_sma_5', 'volume_sma_10', 'volume_sma_20',
+                                     'volume_ratio_5', 'volume_ratio_10', 'volume_ratio_20'])
+        base_features.extend(rolling_features)
+
+    print(data)
+    data = data.fillna(0)
+    # Собираем фичи в правильном порядке:
+    # Сначала все фичи для lag0 (самая свежая), потом для lag1, и так далее
+    feature_vector = []
+
+    for lag in range(19, -1, -1):  # от 19 до 0 (чтобы lag0 был последним/самым свежим)
+        for feat in base_features:
+            if feat in data.columns:
+                # Берём значение для конкретного лага
+                # Индекс: -lag-1 означает "lag шагов от конца"
+                # lag=0 -> индекс -1 (последний)
+                # lag=1 -> индекс -2 (предпоследний)
+                val = data[feat].iloc[-lag - 1] if lag < len(data) else 0
+                feature_vector.append(val)
+
+    return np.array(feature_vector)
 
 
 if __name__ == '__main__':
@@ -394,4 +574,4 @@ if __name__ == '__main__':
     #print(x_data[0])
     p.fit(x_data, y_data, 20)
 
-    #print(p.predict(arr[len(arr)-1 - 20:(len(arr)-1)].values))
+    print(p.predict(df.iloc[-20:].copy()))
