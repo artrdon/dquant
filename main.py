@@ -1,4 +1,5 @@
 from time import sleep
+import time as time
 import numpy as np
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.model_selection import train_test_split
@@ -223,17 +224,76 @@ class VolClust:
         return X, y
 
 
-    def fit(self, data, input_bars, output_bars, trees_count, show_results=False):
-        X, Y = self.__FichEngine(data, input_bars, output_bars)
-        X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2)
+    def fit(self, data, input_bars, horizons, trees_count, show_results=False):
+        x, y = self.__FichEngine(data, input_bars, horizons)
+        X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2)
         train_errors = []
         val_errors = []
-
+        start = time.time()
         for i in range(1, trees_count+1):
-            self.base_model.n_estimators = i
-            self.base_model.fit(X_train, y_train)
-            train_errors.append(mean_squared_error(y_train, self.base_model.predict(X_train)))
-            val_errors.append(mean_squared_error(y_test, self.base_model.predict(X_test)))
+            print(f'{i + 1} trees')
+            t_error = 0
+            v_error = 0
+            for ii in range(horizons):
+                X_scaled = self.scaler.fit_transform(X_train)
+
+                # Определяем горизонты
+                if isinstance(horizons, int):
+                    horizons_list = list(range(horizons))
+                else:
+                    horizons_list = horizons
+
+                # Если y - 2D (уже с горизонтами)
+                if len(y_train.shape) == 2 and y_train.shape[1] > 1:
+                    #print(f"y имеет форму {y_train.shape}, используем каждую колонку как отдельный горизонт")
+                    for h_idx, h in enumerate(horizons_list):
+                        self.models = []
+                        if h_idx >= y_train.shape[1]:
+                            print(f"Предупреждение: горизонт {h} выходит за пределы y, пропускаем")
+                            continue
+
+                        # Берем конкретную колонку для этого горизонта
+                        y_h = y_train.iloc[:, h_idx] if hasattr(y_train, 'iloc') else y_train[:, h_idx]
+
+                        # Убираем NaN
+                        valid_mask = ~pd.isna(y_h) if hasattr(y_h, 'isna') else ~np.isnan(y_h)
+                        #print(X_scaled.shape)
+                        #print(y_h.shape)
+                        #print(y_h)
+                        X_h = X_scaled[valid_mask]
+                        y_h_clean = y_h[valid_mask]
+
+                        # print(f"Горизонт {h}: X shape {X_h.shape}, y shape {y_h_clean.shape}")
+                        percent = int(100.0 / horizons * (h + 1))
+                        """if percent < 10:
+                            print(f'Model is trained for {percent}%', '  | ',
+                                  '|' + '#' * (h + 1) + ' ' * (horizons - (h + 1)) + '|')
+                        elif percent >= 10 and percent < 100:
+                            print(f'Model is trained for {percent}%', " | ",
+                                  '|' + '#' * (h + 1) + ' ' * (horizons - (h + 1)) + '|')
+                        else:
+                            print(f'Model is trained for {percent}%', "| ",
+                                  '|' + '#' * (h + 1) + ' ' * (horizons - (h + 1)) + '|')
+                        """
+                        # Обучаем модель
+                        model = self.base_model.__class__(**self.base_model.get_params())
+                        model.n_estimators = i
+                        model.fit(X_h, y_h_clean)
+                        self.models.append(model)
+
+                        y_h_v = y_test.iloc[:, h_idx] if hasattr(y_test, 'iloc') else y_test[:, h_idx]
+
+                        # Убираем NaN
+                        valid_mask = ~pd.isna(y_h_v) if hasattr(y_h_v, 'isna') else ~np.isnan(y_h_v)
+                        y_h_v_clean = y_h_v[valid_mask]
+                        #print(y_h_clean.shape)
+                        #print(X_train.shape)
+                        t_error += mean_squared_error(y_h_clean, model.predict(X_train))
+                        v_error += mean_squared_error(y_h_v_clean, model.predict(X_test))
+
+            train_errors.append(float(t_error)/horizons)
+            val_errors.append(float(v_error)/horizons)
+            print(f"Затрачено времени: {time.time() - start} сек")
 
         if show_results:
             plt.figure(figsize=(10, 6))
