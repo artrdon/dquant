@@ -1,20 +1,22 @@
 from time import sleep
+import numpy as np
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score, accuracy_score
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler
+from typing import Tuple, List, Optional
 import pandas as pd
 
 
 
-
 class VolClust:
-
     def __init__(self, model_type):
-        self.__X = []
-        self.__Y = []
+        self.models = []
+        self.scaler = StandardScaler()
+        self.is_fitted = False
         if model_type == 'GB':
-            self.model = GradientBoostingRegressor(
+            self.base_model = GradientBoostingRegressor(
                 loss='squared_error',
                 learning_rate=0.01,
                 n_estimators=1,
@@ -28,33 +30,210 @@ class VolClust:
         else:
             raise 'Init Error: Undefined model name. It must be only: GB, XGB, LGB, CB.'
 
-    def __FichEngine(self, data, input_bars, output_bars):
-        x_data = []
-        y_data = []
+    def __FichEngine(self,
+            df: pd.DataFrame,
+            window_in: int,
+            window_out: int,
+            include_volume: bool = True,
+            add_rolling: bool = True,
+            epsilon: float = 1e-10
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Преобразует OHLCV данные в фичи и таргеты для предсказания волатильности.
 
-        for i in range(len(data)):
-            if i < input_bars:
-                continue
-            elif i >= (len(data) - output_bars):
-                break
-            else:
-                x_data.append(data[i-input_bars:i])
-                y_data.append(data[i])
+        Parameters:
+        -----------
+        df : pd.DataFrame
+            DataFrame с колонками ['open', 'high', 'low', 'close', 'volume']
+        window_in : int
+            Размер входного окна (сколько прошлых свечей используем)
+        window_out : int
+            Размер выходного окна (сколько будущих TR предсказываем)
+        include_volume : bool
+            Использовать ли объём в фичах
+        add_rolling : bool
+            Добавлять ли скользящие статистики (ATR, и т.д.)
+        epsilon : float
+            Для защиты от деления на ноль
 
-        return x_data, y_data
+        Returns:
+        --------
+        X : np.ndarray
+            Матрица фичей (samples, features)
+        y : np.ndarray
+            Матрица таргетов (samples, window_out) - будущие значения TR
+        feature_names : List[str]
+            Названия фичей (для понимания)
+        """
+
+        # Копируем, чтобы не портить оригинал
+        data = df.copy()
+
+        # Проверяем наличие необходимых колонок
+        required = ['open', 'high', 'low', 'close']
+        if include_volume:
+            required.append('volume')
+
+        for col in required:
+            if col not in data.columns:
+                raise ValueError(f"Колонка '{col}' не найдена в DataFrame")
+
+        # === 1. Базовые фичи (всегда) ===
+
+        # True Range
+        data['high_low'] = data['high'] - data['low']
+        data['high_close_prev'] = abs(data['high'] - data['close'].shift(1))
+        data['low_close_prev'] = abs(data['low'] - data['close'].shift(1))
+        data['TR'] = data[['high_low', 'high_close_prev', 'low_close_prev']].max(axis=1)
+
+        # Простой диапазон (как запасной вариант)
+        data['range'] = data['high'] - data['low']
+
+        # Доходности
+        data['return'] = np.log(data['close'] / data['close'].shift(1))
+        data['abs_return'] = abs(data['return'])
+        data['return_squared'] = data['return'] ** 2
+
+        # Структура свечи
+        data['body'] = abs(data['close'] - data['open'])
+        data['upper_shadow'] = data['high'] - data[['open', 'close']].max(axis=1)
+        data['lower_shadow'] = data[['open', 'close']].min(axis=1) - data['low']
+        data['body_to_range'] = data['body'] / (data['range'] + epsilon)
+        data['shadow_to_body'] = (data['upper_shadow'] + data['lower_shadow']) / (data['body'] + epsilon)
+
+        # Позиция закрытия
+        data['close_position'] = (data['close'] - data['low']) / (data['range'] + epsilon)
+
+        # Гэпы
+        data['gap'] = data['open'] - data['close'].shift(1)
+        data['abs_gap'] = abs(data['gap'])
+
+        # === 2. Объёмные фичи (если нужно) ===
+        if include_volume:
+            data['log_volume'] = np.log(data['volume'] + 1)
+            data['volume_TR'] = data['volume'] * data['TR']
+            data['volume_range'] = data['volume'] * data['range']
+
+        # === 3. Скользящие статистики (если нужно) ===
+        if add_rolling:
+            # ATR для разных периодов
+            for period in [5, 10, 20]:
+                data[f'ATR_{period}'] = data['TR'].rolling(window=period, min_periods=1).mean()
+                data[f'TR_vs_ATR_{period}'] = data['TR'] / (data[f'ATR_{period}'] + epsilon)
+
+            # Стандартное отклонение доходностей
+            for period in [5, 10, 20]:
+                data[f'return_std_{period}'] = data['return'].rolling(window=period, min_periods=1).std()
+                data[f'abs_return_sma_{period}'] = data['abs_return'].rolling(window=period, min_periods=1).mean()
+
+            # Скользящие средние объёма
+            if include_volume:
+                for period in [5, 10, 20]:
+                    data[f'volume_sma_{period}'] = data['volume'].rolling(window=period, min_periods=1).mean()
+                    data[f'volume_ratio_{period}'] = data['volume'] / (data[f'volume_sma_{period}'] + epsilon)
+
+        # Макро-состояние
+        for period in [10, 20]:
+            data[f'dist_from_high_{period}'] = (data['high'].rolling(window=period, min_periods=1).max() - data[
+                'close']) / (
+                                                       data['range'] + epsilon)
+            data[f'dist_from_low_{period}'] = (data['close'] - data['low'].rolling(window=period,
+                                                                                   min_periods=1).min()) / (
+                                                      data['range'] + epsilon)
+
+        # Полосы Боллинджера (ширина)
+        for period in [20]:
+            sma = data['close'].rolling(window=period, min_periods=1).mean()
+            std = data['close'].rolling(window=period, min_periods=1).std()
+            data[f'bb_width_{period}'] = (sma + 2 * std - (sma - 2 * std)) / (sma + epsilon)
+
+        # Список фичей, которые будем лагировать
+        base_features = [
+            'TR', 'range', 'return', 'abs_return', 'return_squared',
+            'body', 'upper_shadow', 'lower_shadow', 'body_to_range',
+            'shadow_to_body', 'close_position', 'gap', 'abs_gap'
+        ]
+
+        if include_volume:
+            base_features.extend(['log_volume', 'volume_TR', 'volume_range'])
+
+        if add_rolling:
+            rolling_features = [
+                'ATR_5', 'ATR_10', 'ATR_20',
+                'TR_vs_ATR_5', 'TR_vs_ATR_10', 'TR_vs_ATR_20',
+                'return_std_5', 'return_std_10', 'return_std_20',
+                'abs_return_sma_5', 'abs_return_sma_10', 'abs_return_sma_20',
+                'dist_from_high_10', 'dist_from_high_20',
+                'dist_from_low_10', 'dist_from_low_20',
+                'bb_width_20'
+            ]
+            if include_volume:
+                rolling_features.extend(['volume_sma_5', 'volume_sma_10', 'volume_sma_20',
+                                         'volume_ratio_5', 'volume_ratio_10', 'volume_ratio_20'])
+            base_features.extend(rolling_features)
+
+        # Убираем NaN в начале (из-за скользящих окон и лагов)
+        data = data.dropna().reset_index(drop=True)
+
+        # === 4. Создаём плоское окно с лагами ===
+        X_rows = []
+        y_rows = []
+
+        # Минимальное количество данных для одной строки
+        min_rows_needed = window_in + window_out
+
+        for i in range(len(data) - min_rows_needed + 1):
+            # Входное окно: i : i+window_in
+            window = data.iloc[i: i + window_in]
+
+            # Таргет: следующие window_out значений TR
+            target = data['TR'].iloc[i + window_in: i + window_in + window_out].values
+
+            # Проверяем, что таргет полный (нет NaN)
+            if len(target) == window_out and not np.any(np.isnan(target)):
+                # Собираем фичи: для каждой базовой фичи берём все window_in значений
+                row = []
+                for feat in base_features:
+                    if feat in data.columns:
+                        values = window[feat].values
+                        # Дополнительно проверяем на NaN
+                        if np.any(np.isnan(values)):
+                            break
+                        row.extend(values)
+                else:  # выполнится, если не было break (все фичи ок)
+                    X_rows.append(row)
+                    y_rows.append(target)
+
+        # Создаём имена колонок
+        feature_names = []
+        for feat in base_features:
+            if feat in data.columns:
+                for lag in range(window_in):
+                    feature_names.append(f'{feat}_lag{window_in - 1 - lag}')  # lag0 - самая свежая
+
+        # Преобразуем в numpy массивы
+        X = np.array(X_rows)
+        y = np.array(y_rows)
+
+        print(f"Создано {X.shape[0]} примеров")
+        print(f"Вход: {X.shape[1]} фичей")
+        print(f"Выход: {y.shape[1]} шагов")
+
+        #return X, y, feature_names
+        return X, y
+
 
     def fit(self, data, input_bars, output_bars, trees_count, show_results=False):
-
-        self.__X, self.__Y = self.__FichEngine(data, input_bars, output_bars)
-        X_train, X_test, y_train, y_test = train_test_split(self.__X, self.__Y, test_size=0.2)
+        X, Y = self.__FichEngine(data, input_bars, output_bars)
+        X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2)
         train_errors = []
         val_errors = []
 
         for i in range(1, trees_count+1):
-            self.model.n_estimators = i
-            self.model.fit(X_train, y_train)
-            train_errors.append(mean_squared_error(y_train, self.model.predict(X_train)))
-            val_errors.append(mean_squared_error(y_test, self.model.predict(X_test)))
+            self.base_model.n_estimators = i
+            self.base_model.fit(X_train, y_train)
+            train_errors.append(mean_squared_error(y_train, self.base_model.predict(X_train)))
+            val_errors.append(mean_squared_error(y_test, self.base_model.predict(X_test)))
 
         if show_results:
             plt.figure(figsize=(10, 6))
@@ -70,7 +249,7 @@ class VolClust:
         print('model is trained')
 
     def forecast(self, latest_data):
-        return self.model.predict(latest_data)
+        return self.base_model.predict(latest_data)
 
 
 

@@ -45,27 +45,14 @@ df.set_index('time', inplace=True)
 
 # Переименуем колонки под mplfinance
 df.rename(columns={
-    'open': 'Open',
-    'high': 'High',
-    'low': 'Low',
-    'close': 'Close',
-    'tick_volume': 'Volume'
+    'tick_volume': 'volume'
 }, inplace=True)
 
 print(f"Загружено {len(df)} баров с {df.index[0]} по {df.index[-1]}")
-# Расчет логарифмических доходностей
-df['returns'] = np.log(df['Close'] / df['Close'].shift(1))
-arr = df['returns']
-mu = arr.dropna().mean()
-
-data = (df.dropna())
-
-# Обучение модели GARCH(1,1)
-returns = data['returns'].values
 
 model = VolClust('GB')
-model.fit(returns, 30, 1, 200, True)
+model.fit(df, 20, 20, 200, True)
 
 # Вывод результатов
-#print(np.array(returns[-30:]))
-print(model.forecast(np.array([returns[len(returns)-30:]])))
+#print(np.array(df[-30:]))
+print(model.forecast(df.iloc[-20:].copy()))

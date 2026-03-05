@@ -10,9 +10,8 @@ import matplotlib.pyplot as plt
 
 
 class DirectForecaster:
-    def __init__(self, base_model, n_steps):
+    def __init__(self, base_model):
         self.base_model = base_model
-        self.n_steps = n_steps
         self.models = []
         self.scaler = StandardScaler()
         self.is_fitted = False
@@ -538,9 +537,6 @@ if __name__ == '__main__':
         'tick_volume': 'volume'
     }, inplace=True)
     print(f"Загружено {len(df)} баров с {df.index[0]} по {df.index[-1]}")
-    # Расчет логарифмических доходностей
-    #df['returns'] = np.log(df['Close'] / df['Close'].shift(1))
-    #arr = df['returns']
 
 
     model = GradientBoostingRegressor(
@@ -554,24 +550,8 @@ if __name__ == '__main__':
         random_state=42,
         warm_start=True
     )
-    p = DirectForecaster(model, 20)
-    #x_data = []
-    #y_data = []
+    p = DirectForecaster(model)
     x_data, y_data, features_names = prepare_volatility_features(df, 20, 20)
-    '''for i in range(len(arr)):
-        if i <= 20:
-            continue
-        elif i >= (len(arr) - 20):
-            break
-        else:
-            #print(arr[i - 20:i].values)
-            x_data.append(arr[i - 20:i].values)
-            y_data.append(arr[i: i+20].values)
-
-    x_data = pd.DataFrame(x_data)
-    y_data = pd.DataFrame(y_data)
-    print(len(x_data))'''
-    #print(x_data[0])
     p.fit(x_data, y_data, 20)
 
     print(p.predict(df.iloc[-20:].copy()))
