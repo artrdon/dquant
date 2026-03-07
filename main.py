@@ -11,25 +11,22 @@ import pandas as pd
 
 
 
-class VolClust:
-    def __init__(self, model_type):
+class VolClustGB:
+    def __init__(self):
         self.models = []
         self.scaler = StandardScaler()
         self.is_fitted = False
-        if model_type == 'GB':
-            self.base_model = GradientBoostingRegressor(
-                loss='squared_error',
-                learning_rate=0.01,
-                n_estimators=1,
-                max_depth=3,
-                min_samples_split=5,
-                min_samples_leaf=2,
-                subsample=0.8,
-                random_state=42,
-                warm_start=True
-            )
-        else:
-            raise 'Init Error: Undefined model name. It must be only: GB, XGB, LGB, CB.'
+        self.base_model = GradientBoostingRegressor(
+            loss='squared_error',
+            learning_rate=0.01,
+            n_estimators=1,
+            max_depth=3,
+            min_samples_split=5,
+            min_samples_leaf=2,
+            subsample=0.8,
+            random_state=42,
+            warm_start=True
+        )
 
     def __FichEngine(self,
             df: pd.DataFrame,
@@ -223,6 +220,186 @@ class VolClust:
         #return X, y, feature_names
         return X, y
 
+    def __prepare_single_window_features(self,
+            df_window: pd.DataFrame,
+            include_volume: bool = True,
+            add_rolling: bool = True,
+            epsilon: float = 1e-10
+    ) -> np.ndarray:
+        """
+        Преобразует ОДИН датафрейм с 20 свечами в фичи для предсказания.
+
+        Parameters:
+        -----------
+        df_window : pd.DataFrame
+            Датафрейм с 20 строками и колонками ['open', 'high', 'low', 'close', 'volume']
+        include_volume : bool
+            Использовать ли объём в фичах
+        add_rolling : bool
+            Добавлять ли скользящие статистики (требует больше данных внутри окна)
+        epsilon : float
+            Для защиты от деления на ноль
+
+        Returns:
+        --------
+        np.ndarray
+            Вектор фичей длиной (n_features,)
+        """
+
+        # Проверяем, что пришло ровно 20 свечей
+        if len(df_window) != 20:
+            raise ValueError(f"Ожидается 20 свечей, получено {len(df_window)}")
+
+        # Копируем, чтобы не портить оригинал
+        data = df_window.copy()
+
+        # Проверяем наличие необходимых колонок
+        required = ['open', 'high', 'low', 'close']
+        if include_volume:
+            required.append('volume')
+
+        for col in required:
+            if col not in data.columns:
+                raise ValueError(f"Колонка '{col}' не найдена в DataFrame")
+
+        # === 1. Базовые фичи (расчёт на всём окне) ===
+
+        # True Range
+        data['high_low'] = data['high'] - data['low']
+
+        # Для первой свечи нет предыдущей, берём её же (или 0)
+        prev_close = data['close'].shift(1)
+        prev_close.iloc[0] = data['close'].iloc[0]  # для первой свечи
+
+        data['high_close_prev'] = abs(data['high'] - prev_close)
+        data['low_close_prev'] = abs(data['low'] - prev_close)
+        data['TR'] = data[['high_low', 'high_close_prev', 'low_close_prev']].max(axis=1)
+
+        # Простой диапазон
+        data['range'] = data['high'] - data['low']
+
+        # Доходности
+        data['return'] = np.log(data['close'] / data['close'].shift(1))
+        data['return'].iloc[0] = 0  # для первой свечи
+        data['abs_return'] = abs(data['return'])
+        data['return_squared'] = data['return'] ** 2
+
+        # Структура свечи
+        data['body'] = abs(data['close'] - data['open'])
+        data['upper_shadow'] = data['high'] - data[['open', 'close']].max(axis=1)
+        data['lower_shadow'] = data[['open', 'close']].min(axis=1) - data['low']
+        data['body_to_range'] = data['body'] / (data['range'] + epsilon)
+        data['shadow_to_body'] = (data['upper_shadow'] + data['lower_shadow']) / (data['body'] + epsilon)
+
+        # Позиция закрытия
+        data['close_position'] = (data['close'] - data['low']) / (data['range'] + epsilon)
+
+        # Гэпы
+        data['gap'] = data['open'] - data['close'].shift(1)
+        data['gap'].iloc[0] = 0
+        data['abs_gap'] = abs(data['gap'])
+
+        # === 2. Объёмные фичи ===
+        if include_volume:
+            data['log_volume'] = np.log(data['volume'] + 1)
+            data['volume_TR'] = data['volume'] * data['TR']
+            data['volume_range'] = data['volume'] * data['range']
+
+        # === 3. Скользящие статистики (на маленьком окне — приближённо) ===
+        if add_rolling:
+            # Используем expanding вместо rolling, так как окно маленькое
+            # ATR-like
+            data['ATR_5'] = data['TR'].rolling(window=min(5, len(data)), min_periods=1).mean()
+            data['ATR_10'] = data['TR'].rolling(window=min(10, len(data)), min_periods=1).mean()
+            data['ATR_20'] = data['TR'].rolling(window=min(20, len(data)), min_periods=1).mean()
+
+            data['TR_vs_ATR_5'] = data['TR'] / (data['ATR_5'] + epsilon)
+            data['TR_vs_ATR_10'] = data['TR'] / (data['ATR_10'] + epsilon)
+            data['TR_vs_ATR_20'] = data['TR'] / (data['ATR_20'] + epsilon)
+
+            # Стандартное отклонение доходностей
+            data['return_std_5'] = data['return'].rolling(window=min(5, len(data)), min_periods=1).std()
+            data['return_std_10'] = data['return'].rolling(window=min(10, len(data)), min_periods=1).std()
+            data['return_std_20'] = data['return'].rolling(window=min(20, len(data)), min_periods=1).std()
+
+            data['abs_return_sma_5'] = data['abs_return'].rolling(window=min(5, len(data)), min_periods=1).mean()
+            data['abs_return_sma_10'] = data['abs_return'].rolling(window=min(10, len(data)), min_periods=1).mean()
+            data['abs_return_sma_20'] = data['abs_return'].rolling(window=min(20, len(data)), min_periods=1).mean()
+
+        # Объёмные скользящие
+        if include_volume:
+            data['volume_sma_5'] = data['volume'].rolling(window=min(5, len(data)), min_periods=1).mean()
+            data['volume_sma_10'] = data['volume'].rolling(window=min(10, len(data)), min_periods=1).mean()
+            data['volume_sma_20'] = data['volume'].rolling(window=min(20, len(data)), min_periods=1).mean()
+
+            data['volume_ratio_5'] = data['volume'] / (data['volume_sma_5'] + epsilon)
+            data['volume_ratio_10'] = data['volume'] / (data['volume_sma_10'] + epsilon)
+            data['volume_ratio_20'] = data['volume'] / (data['volume_sma_20'] + epsilon)
+
+        # Макро-состояние (на доступных данных)
+        for period in [10, 20]:
+            if period <= len(data):
+                data[f'dist_from_high_{period}'] = (data['high'].rolling(window=period, min_periods=1).max() - data[
+                    'close']) / (data['range'] + epsilon)
+                data[f'dist_from_low_{period}'] = (data['close'] - data['low'].rolling(window=period,
+                                                                                       min_periods=1).min()) / (
+                                                          data['range'] + epsilon)
+            else:
+                data[f'dist_from_high_{period}'] = 0
+                data[f'dist_from_low_{period}'] = 0
+
+        # Полосы Боллинджера
+        if len(data) >= 20:
+            sma = data['close'].rolling(window=20, min_periods=1).mean()
+            std = data['close'].rolling(window=20, min_periods=1).std()
+            data['bb_width_20'] = (sma + 2 * std - (sma - 2 * std)) / (sma + epsilon)
+        else:
+            data['bb_width_20'] = 0
+
+        # === 4. Формируем список фичей в правильном порядке ===
+        # ВАЖНО: порядок должен строго соответствовать порядку из обучающей функции!
+
+        base_features = [
+            'TR', 'range', 'return', 'abs_return', 'return_squared',
+            'body', 'upper_shadow', 'lower_shadow', 'body_to_range',
+            'shadow_to_body', 'close_position', 'gap', 'abs_gap'
+        ]
+
+        if include_volume:
+            base_features.extend(['log_volume', 'volume_TR', 'volume_range'])
+
+        if add_rolling:
+            rolling_features = [
+                'ATR_5', 'ATR_10', 'ATR_20',
+                'TR_vs_ATR_5', 'TR_vs_ATR_10', 'TR_vs_ATR_20',
+                'return_std_5', 'return_std_10', 'return_std_20',
+                'abs_return_sma_5', 'abs_return_sma_10', 'abs_return_sma_20',
+                'dist_from_high_10', 'dist_from_high_20',
+                'dist_from_low_10', 'dist_from_low_20',
+                'bb_width_20'
+            ]
+            if include_volume:
+                rolling_features.extend(['volume_sma_5', 'volume_sma_10', 'volume_sma_20',
+                                         'volume_ratio_5', 'volume_ratio_10', 'volume_ratio_20'])
+            base_features.extend(rolling_features)
+
+        print(data)
+        data = data.fillna(0)
+        # Собираем фичи в правильном порядке:
+        # Сначала все фичи для lag0 (самая свежая), потом для lag1, и так далее
+        feature_vector = []
+
+        for lag in range(19, -1, -1):  # от 19 до 0 (чтобы lag0 был последним/самым свежим)
+            for feat in base_features:
+                if feat in data.columns:
+                    # Берём значение для конкретного лага
+                    # Индекс: -lag-1 означает "lag шагов от конца"
+                    # lag=0 -> индекс -1 (последний)
+                    # lag=1 -> индекс -2 (предпоследний)
+                    val = data[feat].iloc[-lag - 1] if lag < len(data) else 0
+                    feature_vector.append(val)
+
+        return np.array(feature_vector)
 
     def fit(self, data, input_bars, horizons, trees_count, show_results=False):
         x, y = self.__FichEngine(data, input_bars, horizons)
@@ -231,68 +408,82 @@ class VolClust:
         val_errors = []
         start = time.time()
         for i in range(1, trees_count+1):
-            print(f'{i + 1} trees')
+            print(f'{i} trees')
             t_error = 0
             v_error = 0
-            for ii in range(horizons):
-                X_scaled = self.scaler.fit_transform(X_train)
+            X_scaled = self.scaler.fit_transform(X_train)
 
-                # Определяем горизонты
-                if isinstance(horizons, int):
-                    horizons_list = list(range(horizons))
-                else:
-                    horizons_list = horizons
+            # Определяем горизонты
+            if isinstance(horizons, int):
+                horizons_list = list(range(horizons))
+            else:
+                horizons_list = horizons
 
-                # Если y - 2D (уже с горизонтами)
-                if len(y_train.shape) == 2 and y_train.shape[1] > 1:
-                    #print(f"y имеет форму {y_train.shape}, используем каждую колонку как отдельный горизонт")
-                    for h_idx, h in enumerate(horizons_list):
-                        self.models = []
-                        if h_idx >= y_train.shape[1]:
-                            print(f"Предупреждение: горизонт {h} выходит за пределы y, пропускаем")
-                            continue
+            # Если y - 2D (уже с горизонтами)
+            if len(y_train.shape) == 2 and y_train.shape[1] > 1:
+                #print(f"y имеет форму {y_train.shape}, используем каждую колонку как отдельный горизонт")
+                for h_idx, h in enumerate(horizons_list):
+                    #print('h_idx: ', h_idx)
+                    #print('h: ', h)
+                    #self.models = []
+                    if h_idx >= y_train.shape[1]:
+                        print(f"Предупреждение: горизонт {h} выходит за пределы y, пропускаем")
+                        continue
 
-                        # Берем конкретную колонку для этого горизонта
-                        y_h = y_train.iloc[:, h_idx] if hasattr(y_train, 'iloc') else y_train[:, h_idx]
+                    # Берем конкретную колонку для этого горизонта
+                    y_h = y_train.iloc[:, h_idx] if hasattr(y_train, 'iloc') else y_train[:, h_idx]
 
-                        # Убираем NaN
-                        valid_mask = ~pd.isna(y_h) if hasattr(y_h, 'isna') else ~np.isnan(y_h)
-                        #print(X_scaled.shape)
-                        #print(y_h.shape)
-                        #print(y_h)
-                        X_h = X_scaled[valid_mask]
-                        y_h_clean = y_h[valid_mask]
+                    # Убираем NaN
+                    valid_mask = ~pd.isna(y_h) if hasattr(y_h, 'isna') else ~np.isnan(y_h)
+                    #print(X_scaled.shape)
+                    #print(y_h.shape)
+                    #print(y_h)
+                    X_h = X_scaled[valid_mask]
+                    y_h_clean = y_h[valid_mask]
 
-                        # print(f"Горизонт {h}: X shape {X_h.shape}, y shape {y_h_clean.shape}")
-                        percent = int(100.0 / horizons * (h + 1))
-                        """if percent < 10:
-                            print(f'Model is trained for {percent}%', '  | ',
-                                  '|' + '#' * (h + 1) + ' ' * (horizons - (h + 1)) + '|')
-                        elif percent >= 10 and percent < 100:
-                            print(f'Model is trained for {percent}%', " | ",
-                                  '|' + '#' * (h + 1) + ' ' * (horizons - (h + 1)) + '|')
-                        else:
-                            print(f'Model is trained for {percent}%', "| ",
-                                  '|' + '#' * (h + 1) + ' ' * (horizons - (h + 1)) + '|')
-                        """
-                        # Обучаем модель
-                        model = self.base_model.__class__(**self.base_model.get_params())
+                    # print(f"Горизонт {h}: X shape {X_h.shape}, y shape {y_h_clean.shape}")
+                    percent = int(100.0 / horizons * (h + 1))
+                    """if percent < 10:
+                        print(f'Model is trained for {percent}%', '  | ',
+                              '|' + '#' * (h + 1) + ' ' * (horizons - (h + 1)) + '|')
+                    elif percent >= 10 and percent < 100:
+                        print(f'Model is trained for {percent}%', " | ",
+                              '|' + '#' * (h + 1) + ' ' * (horizons - (h + 1)) + '|')
+                    else:
+                        print(f'Model is trained for {percent}%', "| ",
+                              '|' + '#' * (h + 1) + ' ' * (horizons - (h + 1)) + '|')
+                    """
+                    # Обучаем модель
+                    model = self.base_model.__class__(**self.base_model.get_params())
+                    #print('i: ', i)
+                    #print('ii: ', ii)
+                    #print('len(self.models): ', len(self.models))
+                    if i != 1:
+                        self.models[h_idx].n_estimators = i
+                        self.models[h_idx].fit(X_h, y_h_clean)
+                    else:
                         model.n_estimators = i
                         model.fit(X_h, y_h_clean)
                         self.models.append(model)
 
-                        y_h_v = y_test.iloc[:, h_idx] if hasattr(y_test, 'iloc') else y_test[:, h_idx]
+                    y_h_v = y_test.iloc[:, h_idx] if hasattr(y_test, 'iloc') else y_test[:, h_idx]
 
-                        # Убираем NaN
-                        valid_mask = ~pd.isna(y_h_v) if hasattr(y_h_v, 'isna') else ~np.isnan(y_h_v)
-                        y_h_v_clean = y_h_v[valid_mask]
-                        #print(y_h_clean.shape)
-                        #print(X_train.shape)
+                    # Убираем NaN
+                    valid_mask = ~pd.isna(y_h_v) if hasattr(y_h_v, 'isna') else ~np.isnan(y_h_v)
+                    y_h_v_clean = y_h_v[valid_mask]
+                    #print(y_h_clean.shape)
+                    #print(X_train.shape)
+                    if i != 1:
+                        t_error += mean_squared_error(y_h_clean, self.models[h_idx].predict(X_train))
+                        v_error += mean_squared_error(y_h_v_clean, self.models[h_idx].predict(X_test))
+                    else:
                         t_error += mean_squared_error(y_h_clean, model.predict(X_train))
                         v_error += mean_squared_error(y_h_v_clean, model.predict(X_test))
 
+
             train_errors.append(float(t_error)/horizons)
             val_errors.append(float(v_error)/horizons)
+            print('len(self.models): ', len(self.models))
             print(f"Затрачено времени: {time.time() - start} сек")
 
         if show_results:
@@ -307,9 +498,34 @@ class VolClust:
             plt.show()
 
         print('model is trained')
+        self.is_fitted = True
 
     def forecast(self, latest_data):
-        return self.base_model.predict(latest_data)
+        X = self.__prepare_single_window_features(latest_data)
+        if not self.is_fitted:
+            raise ValueError("Модель еще не обучена!")
+
+        # Масштабируем X
+        if len(X.shape) == 1:
+            X = X.reshape(1, -1)
+        X_scaled = self.scaler.transform(X)
+
+        # Предсказываем каждой моделью
+        predictions = []
+        for model in self.models:
+            pred = model.predict(X_scaled)
+            # Если предсказание для нескольких образцов, берем первый
+            if len(pred.shape) > 0 and pred.shape[0] > 1:
+                predictions.append(pred)
+            else:
+                predictions.append(pred[0] if len(pred.shape) > 0 else pred)
+
+        return np.array(predictions)
+
+        print('l:----------------------------------------------------------------------')
+        print(l)
+        print('l:----------------------------------------------------------------------')
+        #return l
 
 
 

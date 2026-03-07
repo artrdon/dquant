@@ -1,4 +1,4 @@
-from main import VolClust
+from main import VolClustGB
 import MetaTrader5 as mt5
 import datetime as dt
 import numpy as np
@@ -50,9 +50,10 @@ df.rename(columns={
 
 print(f"Загружено {len(df)} баров с {df.index[0]} по {df.index[-1]}")
 
-model = VolClust('GB')
-model.fit(df, 20, 20, 10, True)
+model = VolClustGB()
+model.fit(df, 20, 20, 5, True)
 
 # Вывод результатов
 #print(np.array(df[-30:]))
 print(model.forecast(df.iloc[-20:].copy()))
+#model.forecast(df.iloc[-20:].copy())
