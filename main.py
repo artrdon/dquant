@@ -1,3 +1,7 @@
+import joblib
+import re
+import onnxruntime as ort
+import os
 from time import sleep
 import time as time
 import numpy as np
@@ -8,6 +12,8 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from typing import Tuple, List, Optional
 import pandas as pd
+from skl2onnx import convert_sklearn
+from skl2onnx.common.data_types import FloatTensorType
 
 
 
@@ -15,7 +21,9 @@ class VolClustGB:
     def __init__(self):
         self.models = []
         self.scaler = StandardScaler()
+        self.X_shape = 0
         self.is_fitted = False
+        self.onnx_load = False
         self.base_model = GradientBoostingRegressor(
             loss='squared_error',
             learning_rate=0.01,
@@ -385,17 +393,11 @@ class VolClustGB:
 
         print(data)
         data = data.fillna(0)
-        # Собираем фичи в правильном порядке:
-        # Сначала все фичи для lag0 (самая свежая), потом для lag1, и так далее
         feature_vector = []
 
         for lag in range(19, -1, -1):  # от 19 до 0 (чтобы lag0 был последним/самым свежим)
             for feat in base_features:
                 if feat in data.columns:
-                    # Берём значение для конкретного лага
-                    # Индекс: -lag-1 означает "lag шагов от конца"
-                    # lag=0 -> индекс -1 (последний)
-                    # lag=1 -> индекс -2 (предпоследний)
                     val = data[feat].iloc[-lag - 1] if lag < len(data) else 0
                     feature_vector.append(val)
 
@@ -403,7 +405,11 @@ class VolClustGB:
 
     def fit(self, data, input_bars, horizons, trees_count, show_results=False):
         x, y = self.__FichEngine(data, input_bars, horizons)
-        X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2)
+        X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2, shuffle=False, random_state=42)
+        X_scaled = self.scaler.fit_transform(X_train)
+        X_test_scaled = self.scaler.transform(X_test)
+        self.X_shape = X_scaled.shape[1]
+        print('self.X_shape: ', self.X_shape)
         train_errors = []
         val_errors = []
         start = time.time()
@@ -411,8 +417,6 @@ class VolClustGB:
             print(f'{i} trees')
             t_error = 0
             v_error = 0
-            X_scaled = self.scaler.fit_transform(X_train)
-
             # Определяем горизонты
             if isinstance(horizons, int):
                 horizons_list = list(range(horizons))
@@ -421,11 +425,7 @@ class VolClustGB:
 
             # Если y - 2D (уже с горизонтами)
             if len(y_train.shape) == 2 and y_train.shape[1] > 1:
-                #print(f"y имеет форму {y_train.shape}, используем каждую колонку как отдельный горизонт")
                 for h_idx, h in enumerate(horizons_list):
-                    #print('h_idx: ', h_idx)
-                    #print('h: ', h)
-                    #self.models = []
                     if h_idx >= y_train.shape[1]:
                         print(f"Предупреждение: горизонт {h} выходит за пределы y, пропускаем")
                         continue
@@ -435,33 +435,15 @@ class VolClustGB:
 
                     # Убираем NaN
                     valid_mask = ~pd.isna(y_h) if hasattr(y_h, 'isna') else ~np.isnan(y_h)
-                    #print(X_scaled.shape)
-                    #print(y_h.shape)
-                    #print(y_h)
                     X_h = X_scaled[valid_mask]
                     y_h_clean = y_h[valid_mask]
 
-                    # print(f"Горизонт {h}: X shape {X_h.shape}, y shape {y_h_clean.shape}")
-                    percent = int(100.0 / horizons * (h + 1))
-                    """if percent < 10:
-                        print(f'Model is trained for {percent}%', '  | ',
-                              '|' + '#' * (h + 1) + ' ' * (horizons - (h + 1)) + '|')
-                    elif percent >= 10 and percent < 100:
-                        print(f'Model is trained for {percent}%', " | ",
-                              '|' + '#' * (h + 1) + ' ' * (horizons - (h + 1)) + '|')
-                    else:
-                        print(f'Model is trained for {percent}%', "| ",
-                              '|' + '#' * (h + 1) + ' ' * (horizons - (h + 1)) + '|')
-                    """
                     # Обучаем модель
-                    model = self.base_model.__class__(**self.base_model.get_params())
-                    #print('i: ', i)
-                    #print('ii: ', ii)
-                    #print('len(self.models): ', len(self.models))
                     if i != 1:
-                        self.models[h_idx].n_estimators = i
+                        self.models[h_idx].set_params(n_estimators=i)
                         self.models[h_idx].fit(X_h, y_h_clean)
                     else:
+                        model = self.base_model.__class__(**self.base_model.get_params())
                         model.n_estimators = i
                         model.fit(X_h, y_h_clean)
                         self.models.append(model)
@@ -470,20 +452,18 @@ class VolClustGB:
 
                     # Убираем NaN
                     valid_mask = ~pd.isna(y_h_v) if hasattr(y_h_v, 'isna') else ~np.isnan(y_h_v)
+                    X_h_v = X_test_scaled[valid_mask]
                     y_h_v_clean = y_h_v[valid_mask]
-                    #print(y_h_clean.shape)
-                    #print(X_train.shape)
                     if i != 1:
-                        t_error += mean_squared_error(y_h_clean, self.models[h_idx].predict(X_train))
-                        v_error += mean_squared_error(y_h_v_clean, self.models[h_idx].predict(X_test))
+                        t_error += mean_squared_error(y_h_clean, self.models[h_idx].predict(X_h))
+                        v_error += mean_squared_error(y_h_v_clean, self.models[h_idx].predict(X_h_v))
                     else:
-                        t_error += mean_squared_error(y_h_clean, model.predict(X_train))
-                        v_error += mean_squared_error(y_h_v_clean, model.predict(X_test))
+                        t_error += mean_squared_error(y_h_clean, model.predict(X_h))
+                        v_error += mean_squared_error(y_h_v_clean, model.predict(X_h_v))
 
 
             train_errors.append(float(t_error)/horizons)
             val_errors.append(float(v_error)/horizons)
-            print('len(self.models): ', len(self.models))
             print(f"Затрачено времени: {time.time() - start} сек")
 
         if show_results:
@@ -502,31 +482,124 @@ class VolClustGB:
 
     def forecast(self, latest_data):
         X = self.__prepare_single_window_features(latest_data)
-        if not self.is_fitted:
+        if not self.is_fitted and not self.onnx_load:
             raise ValueError("Модель еще не обучена!")
 
-        # Масштабируем X
-        if len(X.shape) == 1:
-            X = X.reshape(1, -1)
-        X_scaled = self.scaler.transform(X)
+        if self.onnx_load:
+            predictions = []
 
-        # Предсказываем каждой моделью
-        predictions = []
-        for model in self.models:
-            pred = model.predict(X_scaled)
-            # Если предсказание для нескольких образцов, берем первый
-            if len(pred.shape) > 0 and pred.shape[0] > 1:
-                predictions.append(pred)
-            else:
-                predictions.append(pred[0] if len(pred.shape) > 0 else pred)
+            # Преобразуем входные данные в float32 (ONNX требует float32)
+            X_float32 = X.astype(np.float32)
+            if len(X_float32.shape) == 1:
+                # Добавляем размерность батча: (n_features,) -> (1, n_features)
+                X_float32 = X_float32.reshape(1, -1)
 
-        return np.array(predictions)
+            X_float32 = self.scaler.transform(X_float32)
 
-        print('l:----------------------------------------------------------------------')
-        print(l)
-        print('l:----------------------------------------------------------------------')
-        #return l
+            for i, session in enumerate(self.loaded_models):
+                # Получаем имя входного тензора
+                input_name = session.get_inputs()[0].name
+
+                # Делаем предсказание
+                pred = session.run(None, {input_name: X_float32})
+                predictions.append(float(f'{pred[0][0][0]:.7f}'))
+
+                print(f"Модель {i} сделала предсказание")
+
+            return np.array(predictions)
+        else:
+            # Масштабируем X
+            X = X.astype(np.float32)
+            if len(X.shape) == 1:
+                X = X.reshape(1, -1)
+            X_scaled = self.scaler.transform(X)
+
+            # Предсказываем каждой моделью
+            predictions = []
+            for model in self.models:
+                pred = model.predict(X_scaled)
+                # Если предсказание для нескольких образцов, берем первый
+                if len(pred.shape) > 0 and pred.shape[0] > 1:
+                    predictions.append(pred)
+                else:
+                    predictions.append(pred[0] if len(pred.shape) > 0 else pred)
+
+            return np.array(predictions)
 
 
+    def save(self, name):
+
+        # Определяем тип входных данных: [None, 5] означает, что batch size может быть любым,
+        # а каждая "строка" (сэмпл) состоит из 5 признаков.
+        os.makedirs(name, exist_ok=True)
+        initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
+
+        if hasattr(self, 'scaler'):
+            scaler_path = os.path.join(name, f"{name}_scaler.pkl")
+            joblib.dump(self.scaler, scaler_path)
+            print(f"Скалер сохранён: {scaler_path}")
+
+        for i in range(len(self.models)):
+            onx = convert_sklearn(self.models[i], initial_types=initial_type, target_opset=12)
+
+            # Формируем путь к файлу
+            file_path = os.path.join(name, f"{name}_{i}.onnx")
+
+            # Сохраняем файл
+            with open(file_path, "wb") as f:
+                f.write(onx.SerializeToString())
 
 
+    def load(self, name):
+        self.loaded_models = []
+
+        if not os.path.exists(name):
+            raise FileNotFoundError(f"Папка {name} не найдена")
+
+        scaler_files = [f for f in os.listdir(name) if f.endswith('_scaler.pkl')]
+        if scaler_files:
+            scaler_path = os.path.join(name, scaler_files[0])
+            self.scaler = joblib.load(scaler_path)
+            print(f"Скалер загружен: {scaler_files[0]}")
+            print(f"  mean: {self.scaler.mean_}")
+            print(f"  scale: {self.scaler.scale_}")
+
+
+            # Получаем все .onnx файлы в папке
+        model_files = [f for f in os.listdir(name) if f.endswith('.onnx')]
+
+        if not model_files:
+            raise FileNotFoundError(f"В папке {name} не найдено .onnx файлов")
+
+        # Сортируем файлы для consistent порядка
+        print(model_files)
+        model_files.sort()
+        ml = len(model_files)
+        numbers = {}
+        for f in model_files:
+            match = re.search(r'_(\d+)\.onnx$', f)
+            if match:
+                num = int(match.group(1))
+                numbers[num] = f
+
+        model_files = []
+        for i in range(ml):
+            model_files.append(numbers[i])
+
+        print(model_files)
+
+        print(f"Найдено моделей: {len(model_files)}")
+
+        # Загружаем каждую модель
+        for model_file in model_files:
+            model_path = os.path.join(name, model_file)
+
+            # Создаем сессию ONNX Runtime
+            session = ort.InferenceSession(model_path, providers=['CPUExecutionProvider'])
+            self.loaded_models.append(session)
+
+            print(f"Загружена модель: {model_file}")
+            print(f"  Входные данные: {[inp.name for inp in session.get_inputs()]}")
+            print(f"  Выходные данные: {[out.name for out in session.get_outputs()]}")
+
+        self.onnx_load = True

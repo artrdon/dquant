@@ -51,8 +51,7 @@ df.rename(columns={
 print(f"Загружено {len(df)} баров с {df.index[0]} по {df.index[-1]}")
 
 model = VolClustGB()
-model.fit(df, 20, 20, 80, True)
-model.save("mod")
+model.load("mod")
 
 # Вывод результатов
 #print(np.array(df[-30:]))

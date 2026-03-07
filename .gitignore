@@ -133,6 +133,8 @@ celerybeat.pid
 
 # SageMath parsed files
 *.sage.py
+*.onnx
+*.pkl
 
 # Environments
 .env
