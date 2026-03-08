@@ -3,6 +3,8 @@ import re
 import onnxruntime as ort
 import os
 from time import sleep
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 import time as time
 import numpy as np
 from sklearn.ensemble import GradientBoostingRegressor
@@ -248,29 +250,9 @@ class VolClustGB:
             add_rolling: bool = True,
             epsilon: float = 1e-10
     ) -> np.ndarray:
-        """
-        Преобразует ОДИН датафрейм с 20 свечами в фичи для предсказания.
-
-        Parameters:
-        -----------
-        df_window : pd.DataFrame
-            Датафрейм с 20 строками и колонками ['open', 'high', 'low', 'close', 'volume']
-        include_volume : bool
-            Использовать ли объём в фичах
-        add_rolling : bool
-            Добавлять ли скользящие статистики (требует больше данных внутри окна)
-        epsilon : float
-            Для защиты от деления на ноль
-
-        Returns:
-        --------
-        np.ndarray
-            Вектор фичей длиной (n_features,)
-        """
-
         # Проверяем, что пришло ровно 20 свечей
-        if len(df_window) != 20:
-            raise ValueError(f"Ожидается 20 свечей, получено {len(df_window)}")
+        #if len(df_window) != 20:
+        #    raise ValueError(f"Ожидается 20 свечей, получено {len(df_window)}")
 
         # Копируем, чтобы не портить оригинал
         data = df_window.copy()
@@ -301,8 +283,8 @@ class VolClustGB:
         data['range'] = data['high'] - data['low']
 
         # Доходности
-        data['return'] = np.log(data['close'] / data['close'].shift(1))
-        data['return'].iloc[0] = 0  # для первой свечи-------------------------------------------------
+        data['return'] = np.log(data['close'] / data['close'].shift(1))#.fillna(0)
+        data['return'].loc[0] = 0  # для первой свечи-------------------------------------------------
         data['abs_return'] = abs(data['return'])
         data['return_squared'] = data['return'] ** 2
 
@@ -317,8 +299,8 @@ class VolClustGB:
         data['close_position'] = (data['close'] - data['low']) / (data['range'] + epsilon)
 
         # Гэпы
-        data['gap'] = data['open'] - data['close'].shift(1)
-        data['gap'].iloc[0] = 0 #--------------------------------------------
+        data['gap'] = (data['open'] - data['close'].shift(1))#.fillna(0)
+        data['gap'].loc[0] = 0 #--------------------------------------------
         data['abs_gap'] = abs(data['gap'])
 
         # === 2. Объёмные фичи ===
@@ -327,29 +309,29 @@ class VolClustGB:
             data['volume_TR'] = data['volume'] * data['TR']
             data['volume_range'] = data['volume'] * data['range']
 
-        #print('window_in: ', window_in)
+        print('window_in: ', window_in)
         # === 3. Скользящие статистики (на маленьком окне — приближённо) ===
         rolling_features = []
         if add_rolling:
             # Используем expanding вместо rolling, так как окно маленькое
             # ATR-like
             for period in list(range(5, window_in+1, 5)):
-                data[f'ATR_{period}'] = data['TR'].rolling(window=min(period, len(data)), min_periods=1).mean()
+                data[f'ATR_{period}'] = data['TR'].rolling(window=period, min_periods=1).mean()
                 data[f'TR_vs_ATR_{period}'] = data['TR'] / (data[f'ATR_{period}'] + epsilon)
                 rolling_features.append(f'ATR_{period}')
                 rolling_features.append(f'TR_vs_ATR_{period}')
 
             # Стандартное отклонение доходностей
             for period in list(range(5, window_in+1, 5)):
-                data[f'return_std_{period}'] = data['return'].rolling(window=min(period, len(data)), min_periods=1).std()
-                data[f'abs_return_sma_{period}'] = data['abs_return'].rolling(window=min(period, len(data)), min_periods=1).mean()
+                data[f'return_std_{period}'] = data['return'].rolling(window=period, min_periods=1).std()
+                data[f'abs_return_sma_{period}'] = data['abs_return'].rolling(window=period, min_periods=1).mean()
                 rolling_features.append(f'return_std_{period}')
                 rolling_features.append(f'abs_return_sma_{period}')
 
             # Скользящие средние объёма
             if include_volume:
                 for period in list(range(5, window_in+1, 5)):
-                    data[f'volume_sma_{period}'] = data['volume'].rolling(window=min(period, len(data)), min_periods=1).mean()
+                    data[f'volume_sma_{period}'] = data['volume'].rolling(window=period, min_periods=1).mean()
                     data[f'volume_ratio_{period}'] = data['volume'] / (data[f'volume_sma_{period}'] + epsilon)
                     rolling_features.append(f'volume_sma_{period}')
                     rolling_features.append(f'volume_ratio_{period}')
@@ -415,7 +397,7 @@ class VolClustGB:
         data = data.fillna(0)
         feature_vector = []
 
-        for lag in range(19, -1, -1):  # от 19 до 0 (чтобы lag0 был последним/самым свежим)
+        for lag in range(window_in-1, -1, -1):  # от 19 до 0 (чтобы lag0 был последним/самым свежим)
             for feat in base_features:
                 if feat in data.columns:
                     val = data[feat].iloc[-lag - 1] if lag < len(data) else 0
@@ -500,7 +482,7 @@ class VolClustGB:
         self.is_fitted = True
 
     def forecast(self, latest_data):
-        X = self.__prepare_single_window_features(latest_data, self.X_shape)
+        X = self.__prepare_single_window_features(latest_data, len(latest_data), False, False)
         if not self.is_fitted and not self.onnx_load:
             raise ValueError("Модель еще не обучена!")
 
@@ -554,7 +536,7 @@ class VolClustGB:
         if hasattr(self, 'scaler'):
             scaler_path = os.path.join(name, f"{name}_scaler.pkl")
             joblib.dump(self.scaler, scaler_path)
-            print(f"Скалер сохранён: {scaler_path}")
+            #print(f"Скалер сохранён: {scaler_path}")
 
         for i in range(len(self.models)):
             onx = convert_sklearn(self.models[i], initial_types=initial_type, target_opset=12)
@@ -599,13 +581,73 @@ class VolClustGB:
             model_files.append(numbers[i])
 
 
-        print(f"Найдено моделей: {len(model_files)}")
+        #print(f"Найдено моделей: {len(model_files)}")
 
         # Загружаем каждую модель
         for model_file in model_files:
             model_path = os.path.join(name, model_file)
             # Создаем сессию ONNX Runtime
             session = ort.InferenceSession(model_path, providers=['CPUExecutionProvider'])
+
+            input_info = session.get_inputs()[0]  # берем первый вход
+
+            shape = input_info.shape
+            #print(f"Полная форма входа: {shape}")
+
+            # Определяем размер окна в зависимости от формата
+            if len(shape) == 3:  # (batch, channels, window)
+                window_size = shape[-1]
+            elif len(shape) == 2:  # (batch, features)
+                window_size = shape[-1]
+            elif len(shape) == 4:  # (batch, channels, height, width)
+                window_size = (shape[-2], shape[-1])  # для изображений
+            else:
+                window_size = shape[-1] if shape[-1] != 'batch' else shape[-2]
+
+            #print('window_size: ', window_size)
+
             self.loaded_models.append(session)
 
         self.onnx_load = True
+
+
+
+
+class Visualiser:
+
+    def __init__(self):
+        return
+
+
+    def show_vol(self, df):
+        fig, ax = plt.subplots(figsize=(15, 6))
+        bottom_y = 0  # нижняя граница
+        candle_height = 0.8  # высота свечи
+        max_bar_height = 0
+        for i, (idx, row) in enumerate(df.iterrows()):
+            x_pos = i  # позиция по x
+
+            # Определяем цвет свечи
+            color = 'green'
+            ax.plot([x_pos, x_pos], [bottom_y, bottom_y],
+                    color='black', linewidth=1)
+
+            bar_height = row['value']
+            if bar_height > max_bar_height:
+                max_bar_height = bar_height
+            # Свеча как прямоугольник
+            rect = patches.Rectangle((x_pos - 0.3, 0), 0.6, bar_height,
+                                     linewidth=1, edgecolor=color, facecolor=color, alpha=0.7)
+            ax.add_patch(rect)
+
+        # Настройка осей
+        ax.set_xlim(-1, len(df))
+        ax.set_ylim(0, max_bar_height * 1.3)
+        ax.set_xlabel('Время')
+        ax.set_ylabel('')
+        ax.set_title('Свечи внизу графика (горизонтальное представление)')
+
+        # Поворачиваем метки дат
+        plt.xticks(range(len(df)), [d.strftime('%m-%d') for d in df.index], rotation=45)
+        plt.tight_layout()
+        plt.show()
