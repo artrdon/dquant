@@ -18,23 +18,26 @@ from skl2onnx.common.data_types import FloatTensorType
 
 
 class VolClustGB:
-    def __init__(self):
+    def __init__(self, sett, default=True):
         self.models = []
         self.scaler = StandardScaler()
         self.X_shape = 0
         self.is_fitted = False
         self.onnx_load = False
-        self.base_model = GradientBoostingRegressor(
-            loss='squared_error',
-            learning_rate=0.01,
-            n_estimators=1,
-            max_depth=3,
-            min_samples_split=5,
-            min_samples_leaf=2,
-            subsample=0.8,
-            random_state=42,
-            warm_start=True
-        )
+        if default:
+            self.base_model = GradientBoostingRegressor(
+                loss='squared_error',
+                learning_rate=0.01,
+                n_estimators=1,
+                max_depth=3,
+                min_samples_split=5,
+                min_samples_leaf=2,
+                subsample=0.8,
+                random_state=42,
+                warm_start=True
+            )
+        else:
+            self.base_model = GradientBoostingRegressor(sett)
 
     def __FichEngine(self,
             df: pd.DataFrame,
@@ -121,37 +124,47 @@ class VolClustGB:
             data['volume_range'] = data['volume'] * data['range']
 
         # === 3. Скользящие статистики (если нужно) ===
+        rolling_features = []
         if add_rolling:
             # ATR для разных периодов
-            for period in [5, 10, 20]:
+            for period in list(range(5, window_in+1, 5)):
                 data[f'ATR_{period}'] = data['TR'].rolling(window=period, min_periods=1).mean()
                 data[f'TR_vs_ATR_{period}'] = data['TR'] / (data[f'ATR_{period}'] + epsilon)
+                rolling_features.append(f'ATR_{period}')
+                rolling_features.append(f'TR_vs_ATR_{period}')
 
             # Стандартное отклонение доходностей
-            for period in [5, 10, 20]:
+            for period in list(range(5, window_in+1, 5)):
                 data[f'return_std_{period}'] = data['return'].rolling(window=period, min_periods=1).std()
                 data[f'abs_return_sma_{period}'] = data['abs_return'].rolling(window=period, min_periods=1).mean()
+                rolling_features.append(f'return_std_{period}')
+                rolling_features.append(f'abs_return_sma_{period}')
 
             # Скользящие средние объёма
             if include_volume:
-                for period in [5, 10, 20]:
+                for period in list(range(5, window_in+1, 5)):
                     data[f'volume_sma_{period}'] = data['volume'].rolling(window=period, min_periods=1).mean()
                     data[f'volume_ratio_{period}'] = data['volume'] / (data[f'volume_sma_{period}'] + epsilon)
+                    rolling_features.append(f'volume_sma_{period}')
+                    rolling_features.append(f'volume_ratio_{period}')
 
         # Макро-состояние
-        for period in [10, 20]:
+        for period in list(range(10, window_in+1, 10)):
             data[f'dist_from_high_{period}'] = (data['high'].rolling(window=period, min_periods=1).max() - data[
                 'close']) / (
                                                        data['range'] + epsilon)
             data[f'dist_from_low_{period}'] = (data['close'] - data['low'].rolling(window=period,
                                                                                    min_periods=1).min()) / (
                                                       data['range'] + epsilon)
+            rolling_features.append(f'dist_from_high_{period}')
+            rolling_features.append(f'dist_from_low_{period}')
 
         # Полосы Боллинджера (ширина)
-        for period in [20]:
+        for period in [window_in]:
             sma = data['close'].rolling(window=period, min_periods=1).mean()
             std = data['close'].rolling(window=period, min_periods=1).std()
             data[f'bb_width_{period}'] = (sma + 2 * std - (sma - 2 * std)) / (sma + epsilon)
+            rolling_features.append(f'bb_width_{period}')
 
         # Список фичей, которые будем лагировать
         base_features = [
@@ -164,7 +177,7 @@ class VolClustGB:
             base_features.extend(['log_volume', 'volume_TR', 'volume_range'])
 
         if add_rolling:
-            rolling_features = [
+            """rolling_features = [
                 'ATR_5', 'ATR_10', 'ATR_20',
                 'TR_vs_ATR_5', 'TR_vs_ATR_10', 'TR_vs_ATR_20',
                 'return_std_5', 'return_std_10', 'return_std_20',
@@ -175,7 +188,7 @@ class VolClustGB:
             ]
             if include_volume:
                 rolling_features.extend(['volume_sma_5', 'volume_sma_10', 'volume_sma_20',
-                                         'volume_ratio_5', 'volume_ratio_10', 'volume_ratio_20'])
+                                         'volume_ratio_5', 'volume_ratio_10', 'volume_ratio_20'])"""
             base_features.extend(rolling_features)
 
         # Убираем NaN в начале (из-за скользящих окон и лагов)
@@ -230,6 +243,7 @@ class VolClustGB:
 
     def __prepare_single_window_features(self,
             df_window: pd.DataFrame,
+            window_in: int,
             include_volume: bool = True,
             add_rolling: bool = True,
             epsilon: float = 1e-10
@@ -288,7 +302,7 @@ class VolClustGB:
 
         # Доходности
         data['return'] = np.log(data['close'] / data['close'].shift(1))
-        data['return'].iloc[0] = 0  # для первой свечи
+        data['return'].iloc[0] = 0  # для первой свечи-------------------------------------------------
         data['abs_return'] = abs(data['return'])
         data['return_squared'] = data['return'] ** 2
 
@@ -304,7 +318,7 @@ class VolClustGB:
 
         # Гэпы
         data['gap'] = data['open'] - data['close'].shift(1)
-        data['gap'].iloc[0] = 0
+        data['gap'].iloc[0] = 0 #--------------------------------------------
         data['abs_gap'] = abs(data['gap'])
 
         # === 2. Объёмные фичи ===
@@ -313,56 +327,63 @@ class VolClustGB:
             data['volume_TR'] = data['volume'] * data['TR']
             data['volume_range'] = data['volume'] * data['range']
 
+        #print('window_in: ', window_in)
         # === 3. Скользящие статистики (на маленьком окне — приближённо) ===
+        rolling_features = []
         if add_rolling:
             # Используем expanding вместо rolling, так как окно маленькое
             # ATR-like
-            data['ATR_5'] = data['TR'].rolling(window=min(5, len(data)), min_periods=1).mean()
-            data['ATR_10'] = data['TR'].rolling(window=min(10, len(data)), min_periods=1).mean()
-            data['ATR_20'] = data['TR'].rolling(window=min(20, len(data)), min_periods=1).mean()
-
-            data['TR_vs_ATR_5'] = data['TR'] / (data['ATR_5'] + epsilon)
-            data['TR_vs_ATR_10'] = data['TR'] / (data['ATR_10'] + epsilon)
-            data['TR_vs_ATR_20'] = data['TR'] / (data['ATR_20'] + epsilon)
+            for period in list(range(5, window_in+1, 5)):
+                data[f'ATR_{period}'] = data['TR'].rolling(window=min(period, len(data)), min_periods=1).mean()
+                data[f'TR_vs_ATR_{period}'] = data['TR'] / (data[f'ATR_{period}'] + epsilon)
+                rolling_features.append(f'ATR_{period}')
+                rolling_features.append(f'TR_vs_ATR_{period}')
 
             # Стандартное отклонение доходностей
-            data['return_std_5'] = data['return'].rolling(window=min(5, len(data)), min_periods=1).std()
-            data['return_std_10'] = data['return'].rolling(window=min(10, len(data)), min_periods=1).std()
-            data['return_std_20'] = data['return'].rolling(window=min(20, len(data)), min_periods=1).std()
+            for period in list(range(5, window_in+1, 5)):
+                data[f'return_std_{period}'] = data['return'].rolling(window=min(period, len(data)), min_periods=1).std()
+                data[f'abs_return_sma_{period}'] = data['abs_return'].rolling(window=min(period, len(data)), min_periods=1).mean()
+                rolling_features.append(f'return_std_{period}')
+                rolling_features.append(f'abs_return_sma_{period}')
 
-            data['abs_return_sma_5'] = data['abs_return'].rolling(window=min(5, len(data)), min_periods=1).mean()
-            data['abs_return_sma_10'] = data['abs_return'].rolling(window=min(10, len(data)), min_periods=1).mean()
-            data['abs_return_sma_20'] = data['abs_return'].rolling(window=min(20, len(data)), min_periods=1).mean()
+            # Скользящие средние объёма
+            if include_volume:
+                for period in list(range(5, window_in+1, 5)):
+                    data[f'volume_sma_{period}'] = data['volume'].rolling(window=min(period, len(data)), min_periods=1).mean()
+                    data[f'volume_ratio_{period}'] = data['volume'] / (data[f'volume_sma_{period}'] + epsilon)
+                    rolling_features.append(f'volume_sma_{period}')
+                    rolling_features.append(f'volume_ratio_{period}')
 
         # Объёмные скользящие
-        if include_volume:
-            data['volume_sma_5'] = data['volume'].rolling(window=min(5, len(data)), min_periods=1).mean()
-            data['volume_sma_10'] = data['volume'].rolling(window=min(10, len(data)), min_periods=1).mean()
-            data['volume_sma_20'] = data['volume'].rolling(window=min(20, len(data)), min_periods=1).mean()
-
-            data['volume_ratio_5'] = data['volume'] / (data['volume_sma_5'] + epsilon)
-            data['volume_ratio_10'] = data['volume'] / (data['volume_sma_10'] + epsilon)
-            data['volume_ratio_20'] = data['volume'] / (data['volume_sma_20'] + epsilon)
 
         # Макро-состояние (на доступных данных)
-        for period in [10, 20]:
+
+        for period in list(range(10, window_in+1, 10)):
             if period <= len(data):
                 data[f'dist_from_high_{period}'] = (data['high'].rolling(window=period, min_periods=1).max() - data[
-                    'close']) / (data['range'] + epsilon)
+                    'close']) / (
+                                                           data['range'] + epsilon)
                 data[f'dist_from_low_{period}'] = (data['close'] - data['low'].rolling(window=period,
                                                                                        min_periods=1).min()) / (
                                                           data['range'] + epsilon)
+                rolling_features.append(f'dist_from_high_{period}')
+                rolling_features.append(f'dist_from_low_{period}')
             else:
                 data[f'dist_from_high_{period}'] = 0
                 data[f'dist_from_low_{period}'] = 0
+                rolling_features.append(f'dist_from_high_{period}')
+                rolling_features.append(f'dist_from_low_{period}')
 
-        # Полосы Боллинджера
-        if len(data) >= 20:
-            sma = data['close'].rolling(window=20, min_periods=1).mean()
-            std = data['close'].rolling(window=20, min_periods=1).std()
-            data['bb_width_20'] = (sma + 2 * std - (sma - 2 * std)) / (sma + epsilon)
-        else:
-            data['bb_width_20'] = 0
+        # Полосы Боллинджера (ширина)
+        for period in [window_in]:
+            if len(data) >= period:
+                sma = data['close'].rolling(window=period, min_periods=1).mean()
+                std = data['close'].rolling(window=period, min_periods=1).std()
+                data[f'bb_width_{period}'] = (sma + 2 * std - (sma - 2 * std)) / (sma + epsilon)
+                rolling_features.append(f'bb_width_{period}')
+            else:
+                data[f'bb_width_{period}'] = 0
+                rolling_features.append(f'bb_width_{period}')
 
         # === 4. Формируем список фичей в правильном порядке ===
         # ВАЖНО: порядок должен строго соответствовать порядку из обучающей функции!
@@ -377,7 +398,7 @@ class VolClustGB:
             base_features.extend(['log_volume', 'volume_TR', 'volume_range'])
 
         if add_rolling:
-            rolling_features = [
+            """rolling_features = [
                 'ATR_5', 'ATR_10', 'ATR_20',
                 'TR_vs_ATR_5', 'TR_vs_ATR_10', 'TR_vs_ATR_20',
                 'return_std_5', 'return_std_10', 'return_std_20',
@@ -388,10 +409,9 @@ class VolClustGB:
             ]
             if include_volume:
                 rolling_features.extend(['volume_sma_5', 'volume_sma_10', 'volume_sma_20',
-                                         'volume_ratio_5', 'volume_ratio_10', 'volume_ratio_20'])
+                                         'volume_ratio_5', 'volume_ratio_10', 'volume_ratio_20'])"""
             base_features.extend(rolling_features)
 
-        print(data)
         data = data.fillna(0)
         feature_vector = []
 
@@ -404,12 +424,11 @@ class VolClustGB:
         return np.array(feature_vector)
 
     def fit(self, data, input_bars, horizons, trees_count, show_results=False):
-        x, y = self.__FichEngine(data, input_bars, horizons)
+        x, y = self.__FichEngine(data, input_bars, horizons, False, False)
         X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2, shuffle=False, random_state=42)
         X_scaled = self.scaler.fit_transform(X_train)
         X_test_scaled = self.scaler.transform(X_test)
         self.X_shape = X_scaled.shape[1]
-        print('self.X_shape: ', self.X_shape)
         train_errors = []
         val_errors = []
         start = time.time()
@@ -481,7 +500,7 @@ class VolClustGB:
         self.is_fitted = True
 
     def forecast(self, latest_data):
-        X = self.__prepare_single_window_features(latest_data)
+        X = self.__prepare_single_window_features(latest_data, self.X_shape)
         if not self.is_fitted and not self.onnx_load:
             raise ValueError("Модель еще не обучена!")
 
@@ -503,8 +522,6 @@ class VolClustGB:
                 # Делаем предсказание
                 pred = session.run(None, {input_name: X_float32})
                 predictions.append(float(f'{pred[0][0][0]:.7f}'))
-
-                print(f"Модель {i} сделала предсказание")
 
             return np.array(predictions)
         else:
@@ -560,10 +577,6 @@ class VolClustGB:
         if scaler_files:
             scaler_path = os.path.join(name, scaler_files[0])
             self.scaler = joblib.load(scaler_path)
-            print(f"Скалер загружен: {scaler_files[0]}")
-            print(f"  mean: {self.scaler.mean_}")
-            print(f"  scale: {self.scaler.scale_}")
-
 
             # Получаем все .onnx файлы в папке
         model_files = [f for f in os.listdir(name) if f.endswith('.onnx')]
@@ -572,7 +585,6 @@ class VolClustGB:
             raise FileNotFoundError(f"В папке {name} не найдено .onnx файлов")
 
         # Сортируем файлы для consistent порядка
-        print(model_files)
         model_files.sort()
         ml = len(model_files)
         numbers = {}
@@ -586,20 +598,14 @@ class VolClustGB:
         for i in range(ml):
             model_files.append(numbers[i])
 
-        print(model_files)
 
         print(f"Найдено моделей: {len(model_files)}")
 
         # Загружаем каждую модель
         for model_file in model_files:
             model_path = os.path.join(name, model_file)
-
             # Создаем сессию ONNX Runtime
             session = ort.InferenceSession(model_path, providers=['CPUExecutionProvider'])
             self.loaded_models.append(session)
-
-            print(f"Загружена модель: {model_file}")
-            print(f"  Входные данные: {[inp.name for inp in session.get_inputs()]}")
-            print(f"  Выходные данные: {[out.name for out in session.get_outputs()]}")
 
         self.onnx_load = True
