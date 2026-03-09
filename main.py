@@ -5,12 +5,12 @@ import os
 from time import sleep
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+from visual import Visualization
 import time as time
 import numpy as np
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score, accuracy_score
-import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from typing import Tuple, List, Optional
 import pandas as pd
@@ -20,12 +20,14 @@ from skl2onnx.common.data_types import FloatTensorType
 
 
 class VolClustGB:
-    def __init__(self, sett, default=True):
+    def __init__(self, sett, default=True, early_stopping=True):
         self.models = []
         self.scaler = StandardScaler()
         self.X_shape = 0
         self.is_fitted = False
         self.onnx_load = False
+        self.early_stopping = early_stopping
+        self.V = Visualization('dark')
         if default:
             self.base_model = GradientBoostingRegressor(
                 loss='squared_error',
@@ -39,7 +41,7 @@ class VolClustGB:
                 warm_start=True
             )
         else:
-            self.base_model = GradientBoostingRegressor(sett)
+            self.base_model = GradientBoostingRegressor(**sett)
 
     def __FichEngine(self,
             df: pd.DataFrame,
@@ -49,34 +51,6 @@ class VolClustGB:
             add_rolling: bool = True,
             epsilon: float = 1e-10
     ) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Преобразует OHLCV данные в фичи и таргеты для предсказания волатильности.
-
-        Parameters:
-        -----------
-        df : pd.DataFrame
-            DataFrame с колонками ['open', 'high', 'low', 'close', 'volume']
-        window_in : int
-            Размер входного окна (сколько прошлых свечей используем)
-        window_out : int
-            Размер выходного окна (сколько будущих TR предсказываем)
-        include_volume : bool
-            Использовать ли объём в фичах
-        add_rolling : bool
-            Добавлять ли скользящие статистики (ATR, и т.д.)
-        epsilon : float
-            Для защиты от деления на ноль
-
-        Returns:
-        --------
-        X : np.ndarray
-            Матрица фичей (samples, features)
-        y : np.ndarray
-            Матрица таргетов (samples, window_out) - будущие значения TR
-        feature_names : List[str]
-            Названия фичей (для понимания)
-        """
-
         # Копируем, чтобы не портить оригинал
         data = df.copy()
 
@@ -411,8 +385,14 @@ class VolClustGB:
         X_scaled = self.scaler.fit_transform(X_train)
         X_test_scaled = self.scaler.transform(X_test)
         self.X_shape = X_scaled.shape[1]
+
+        # early stopping variables
+        previous_error = 0
+        previous_error_was_grow = False
+
         train_errors = []
         val_errors = []
+
         start = time.time()
         for i in range(1, trees_count+1):
             print(f'{i} trees')
@@ -463,20 +443,28 @@ class VolClustGB:
                         v_error += mean_squared_error(y_h_v_clean, model.predict(X_h_v))
 
 
-            train_errors.append(float(t_error)/horizons)
-            val_errors.append(float(v_error)/horizons)
+            var_test_error = float(t_error)/horizons
+            var_val_error = float(v_error)/horizons
+
+            if self.early_stopping:
+                if previous_error_was_grow:
+                    print(f'training stopped by early stopping on {i} trees')
+                    if show_results:
+                        self.V.show_errors(train_errors, val_errors)
+                    self.is_fitted = True
+                    return
+                else:
+                    if previous_error != 0 and previous_error < var_val_error:
+                        previous_error_was_grow = True
+
+            previous_error = var_val_error
+
+            train_errors.append(var_test_error)
+            val_errors.append(var_val_error)
             print(f"Затрачено времени: {time.time() - start} сек")
 
         if show_results:
-            plt.figure(figsize=(10, 6))
-            plt.plot(list(train_errors), label='Train Loss')
-            plt.plot(list(val_errors), label='Validation Loss')
-            plt.xlabel('Trees')
-            plt.ylabel('MSE Loss')
-            plt.title('Training and Test Loss over Trees')
-            plt.legend()
-            plt.grid(True)
-            plt.show()
+            self.V.show_errors(train_errors, val_errors)
 
         print('model is trained')
         self.is_fitted = True
@@ -609,45 +597,3 @@ class VolClustGB:
             self.loaded_models.append(session)
 
         self.onnx_load = True
-
-
-
-
-class Visualiser:
-
-    def __init__(self):
-        return
-
-
-    def show_vol(self, df):
-        fig, ax = plt.subplots(figsize=(15, 6))
-        bottom_y = 0  # нижняя граница
-        candle_height = 0.8  # высота свечи
-        max_bar_height = 0
-        for i, (idx, row) in enumerate(df.iterrows()):
-            x_pos = i  # позиция по x
-
-            # Определяем цвет свечи
-            color = 'green'
-            ax.plot([x_pos, x_pos], [bottom_y, bottom_y],
-                    color='black', linewidth=1)
-
-            bar_height = row['value']
-            if bar_height > max_bar_height:
-                max_bar_height = bar_height
-            # Свеча как прямоугольник
-            rect = patches.Rectangle((x_pos - 0.3, 0), 0.6, bar_height,
-                                     linewidth=1, edgecolor=color, facecolor=color, alpha=0.7)
-            ax.add_patch(rect)
-
-        # Настройка осей
-        ax.set_xlim(-1, len(df))
-        ax.set_ylim(0, max_bar_height * 1.3)
-        ax.set_xlabel('Время')
-        ax.set_ylabel('')
-        ax.set_title('Свечи внизу графика (горизонтальное представление)')
-
-        # Поворачиваем метки дат
-        plt.xticks(range(len(df)), [d.strftime('%m-%d') for d in df.index], rotation=45)
-        plt.tight_layout()
-        plt.show()
