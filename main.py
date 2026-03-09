@@ -8,6 +8,8 @@ import matplotlib.patches as patches
 from visual import Visualization
 import time as time
 import numpy as np
+import xgboost
+import lightgbm
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score, accuracy_score
@@ -16,34 +18,13 @@ from typing import Tuple, List, Optional
 import pandas as pd
 from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType
+import warnings
+warnings.filterwarnings('ignore', message='X does not have valid feature names')
 
 
+class FichEn:
 
-class VolClustGB:
-    def __init__(self, sett, default=True, early_stopping=True):
-        self.models = []
-        self.scaler = StandardScaler()
-        self.X_shape = 0
-        self.is_fitted = False
-        self.onnx_load = False
-        self.early_stopping = early_stopping
-        self.V = Visualization('dark')
-        if default:
-            self.base_model = GradientBoostingRegressor(
-                loss='squared_error',
-                learning_rate=0.01,
-                n_estimators=1,
-                max_depth=3,
-                min_samples_split=5,
-                min_samples_leaf=2,
-                subsample=0.8,
-                random_state=42,
-                warm_start=True
-            )
-        else:
-            self.base_model = GradientBoostingRegressor(**sett)
-
-    def __FichEngine(self,
+    def _FichEngine(self,
             df: pd.DataFrame,
             window_in: int,
             window_out: int,
@@ -217,7 +198,7 @@ class VolClustGB:
         #return X, y, feature_names
         return X, y
 
-    def __prepare_single_window_features(self,
+    def _prepare_single_window_features(self,
             df_window: pd.DataFrame,
             window_in: int,
             include_volume: bool = True,
@@ -379,8 +360,9 @@ class VolClustGB:
 
         return np.array(feature_vector)
 
+
     def fit(self, data, input_bars, horizons, trees_count, show_results=False):
-        x, y = self.__FichEngine(data, input_bars, horizons, False, False)
+        x, y = self._FichEngine(data, input_bars, horizons, False, False)
         X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2, shuffle=False, random_state=42)
         X_scaled = self.scaler.fit_transform(X_train)
         X_test_scaled = self.scaler.transform(X_test)
@@ -461,7 +443,10 @@ class VolClustGB:
 
             train_errors.append(var_test_error)
             val_errors.append(var_val_error)
+            print('Train error:      ', var_test_error)
+            print('Validation error: ', var_val_error)
             print(f"Затрачено времени: {time.time() - start} сек")
+
 
         if show_results:
             self.V.show_errors(train_errors, val_errors)
@@ -470,7 +455,7 @@ class VolClustGB:
         self.is_fitted = True
 
     def forecast(self, latest_data):
-        X = self.__prepare_single_window_features(latest_data, len(latest_data), False, False)
+        X = self._prepare_single_window_features(latest_data, len(latest_data), False, False)
         if not self.is_fitted and not self.onnx_load:
             raise ValueError("Модель еще не обучена!")
 
@@ -512,6 +497,250 @@ class VolClustGB:
                     predictions.append(pred[0] if len(pred.shape) > 0 else pred)
 
             return np.array(predictions)
+
+
+
+class VolClustGB(FichEn):
+    def __init__(self, sett, default=True, early_stopping=True):
+        self.models = []
+        self.scaler = StandardScaler()
+        self.X_shape = 0
+        self.is_fitted = False
+        self.onnx_load = False
+        self.early_stopping = early_stopping
+        self.V = Visualization('dark')
+        if default:
+            self.base_model = GradientBoostingRegressor(
+                loss='squared_error',
+                learning_rate=0.01,
+                n_estimators=1,
+                max_depth=3,
+                min_samples_split=5,
+                min_samples_leaf=2,
+                subsample=0.8,
+                random_state=42,
+                warm_start=True
+            )
+        else:
+            self.base_model = GradientBoostingRegressor(**sett)
+
+
+    def save(self, name):
+
+        # Определяем тип входных данных: [None, 5] означает, что batch size может быть любым,
+        # а каждая "строка" (сэмпл) состоит из 5 признаков.
+        os.makedirs(name, exist_ok=True)
+        initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
+
+        if hasattr(self, 'scaler'):
+            scaler_path = os.path.join(name, f"{name}_scaler.pkl")
+            joblib.dump(self.scaler, scaler_path)
+            #print(f"Скалер сохранён: {scaler_path}")
+
+        for i in range(len(self.models)):
+            onx = convert_sklearn(self.models[i], initial_types=initial_type, target_opset=12)
+
+            # Формируем путь к файлу
+            file_path = os.path.join(name, f"{name}_{i}.onnx")
+
+            # Сохраняем файл
+            with open(file_path, "wb") as f:
+                f.write(onx.SerializeToString())
+
+
+    def load(self, name):
+        self.loaded_models = []
+
+        if not os.path.exists(name):
+            raise FileNotFoundError(f"Папка {name} не найдена")
+
+        scaler_files = [f for f in os.listdir(name) if f.endswith('_scaler.pkl')]
+        if scaler_files:
+            scaler_path = os.path.join(name, scaler_files[0])
+            self.scaler = joblib.load(scaler_path)
+
+            # Получаем все .onnx файлы в папке
+        model_files = [f for f in os.listdir(name) if f.endswith('.onnx')]
+
+        if not model_files:
+            raise FileNotFoundError(f"В папке {name} не найдено .onnx файлов")
+
+        # Сортируем файлы для consistent порядка
+        model_files.sort()
+        ml = len(model_files)
+        numbers = {}
+        for f in model_files:
+            match = re.search(r'_(\d+)\.onnx$', f)
+            if match:
+                num = int(match.group(1))
+                numbers[num] = f
+
+        model_files = []
+        for i in range(ml):
+            model_files.append(numbers[i])
+
+
+        #print(f"Найдено моделей: {len(model_files)}")
+
+        # Загружаем каждую модель
+        for model_file in model_files:
+            model_path = os.path.join(name, model_file)
+            # Создаем сессию ONNX Runtime
+            session = ort.InferenceSession(model_path, providers=['CPUExecutionProvider'])
+
+            input_info = session.get_inputs()[0]  # берем первый вход
+
+            shape = input_info.shape
+            #print(f"Полная форма входа: {shape}")
+
+            # Определяем размер окна в зависимости от формата
+            if len(shape) == 3:  # (batch, channels, window)
+                window_size = shape[-1]
+            elif len(shape) == 2:  # (batch, features)
+                window_size = shape[-1]
+            elif len(shape) == 4:  # (batch, channels, height, width)
+                window_size = (shape[-2], shape[-1])  # для изображений
+            else:
+                window_size = shape[-1] if shape[-1] != 'batch' else shape[-2]
+
+            #print('window_size: ', window_size)
+
+            self.loaded_models.append(session)
+
+        self.onnx_load = True
+
+
+class VolClustXGB(FichEn):
+    def __init__(self, sett, default=True, early_stopping=True):
+        self.models = []
+        self.scaler = StandardScaler()
+        self.X_shape = 0
+        self.is_fitted = False
+        self.onnx_load = False
+        self.early_stopping = early_stopping
+        self.V = Visualization('dark')
+        if default:
+            self.base_model = xgboost.XGBRegressor(
+                objective='reg:squarederror',  # вместо 'loss'
+                learning_rate=0.01,
+                n_estimators=1,
+                max_depth=3,
+                min_child_weight=5,
+                subsample=0.8,
+                random_state=42,
+            )
+        else:
+            self.base_model = xgboost.XGBRegressor(**sett)
+
+
+    def save(self, name):
+
+        # Определяем тип входных данных: [None, 5] означает, что batch size может быть любым,
+        # а каждая "строка" (сэмпл) состоит из 5 признаков.
+        os.makedirs(name, exist_ok=True)
+        initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
+
+        if hasattr(self, 'scaler'):
+            scaler_path = os.path.join(name, f"{name}_scaler.pkl")
+            joblib.dump(self.scaler, scaler_path)
+            #print(f"Скалер сохранён: {scaler_path}")
+
+        for i in range(len(self.models)):
+            onx = convert_sklearn(self.models[i], initial_types=initial_type, target_opset=12)
+
+            # Формируем путь к файлу
+            file_path = os.path.join(name, f"{name}_{i}.onnx")
+
+            # Сохраняем файл
+            with open(file_path, "wb") as f:
+                f.write(onx.SerializeToString())
+
+
+    def load(self, name):
+        self.loaded_models = []
+
+        if not os.path.exists(name):
+            raise FileNotFoundError(f"Папка {name} не найдена")
+
+        scaler_files = [f for f in os.listdir(name) if f.endswith('_scaler.pkl')]
+        if scaler_files:
+            scaler_path = os.path.join(name, scaler_files[0])
+            self.scaler = joblib.load(scaler_path)
+
+            # Получаем все .onnx файлы в папке
+        model_files = [f for f in os.listdir(name) if f.endswith('.onnx')]
+
+        if not model_files:
+            raise FileNotFoundError(f"В папке {name} не найдено .onnx файлов")
+
+        # Сортируем файлы для consistent порядка
+        model_files.sort()
+        ml = len(model_files)
+        numbers = {}
+        for f in model_files:
+            match = re.search(r'_(\d+)\.onnx$', f)
+            if match:
+                num = int(match.group(1))
+                numbers[num] = f
+
+        model_files = []
+        for i in range(ml):
+            model_files.append(numbers[i])
+
+
+        #print(f"Найдено моделей: {len(model_files)}")
+
+        # Загружаем каждую модель
+        for model_file in model_files:
+            model_path = os.path.join(name, model_file)
+            # Создаем сессию ONNX Runtime
+            session = ort.InferenceSession(model_path, providers=['CPUExecutionProvider'])
+
+            input_info = session.get_inputs()[0]  # берем первый вход
+
+            shape = input_info.shape
+            #print(f"Полная форма входа: {shape}")
+
+            # Определяем размер окна в зависимости от формата
+            if len(shape) == 3:  # (batch, channels, window)
+                window_size = shape[-1]
+            elif len(shape) == 2:  # (batch, features)
+                window_size = shape[-1]
+            elif len(shape) == 4:  # (batch, channels, height, width)
+                window_size = (shape[-2], shape[-1])  # для изображений
+            else:
+                window_size = shape[-1] if shape[-1] != 'batch' else shape[-2]
+
+            #print('window_size: ', window_size)
+
+            self.loaded_models.append(session)
+
+        self.onnx_load = True
+
+
+class VolClustLightGB(FichEn):
+    def __init__(self, sett, default=True, early_stopping=True):
+        self.models = []
+        self.scaler = StandardScaler()
+        self.X_shape = 0
+        self.is_fitted = False
+        self.onnx_load = False
+        self.early_stopping = early_stopping
+        self.V = Visualization('dark')
+        if default:
+            self.base_model = lightgbm.LGBMRegressor(
+                objective='regression',
+                learning_rate=0.01,
+                n_estimators=1,
+                max_depth=3,
+                min_sum_hessian_in_leaf=5,  # вместо min_child_weight
+                subsample=0.8,  # или bagging_fraction
+                subsample_freq=1,  # частота применения subsample
+                random_state=42,
+                verbose=-1
+            )
+        else:
+            self.base_model = lightgbm.LGBMRegressor(**sett)
 
 
     def save(self, name):
