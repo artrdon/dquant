@@ -2,12 +2,9 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
 from cycler import cycler
-import matplotlib.image as mpimg
-from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import os
-from datetime import datetime
 
-# Базовая конфигурация (общие параметры)
+
 base_config = {
     # ОСНОВНЫЕ ПАРАМЕТРЫ
     'figure': {
@@ -15,7 +12,7 @@ base_config = {
         'dpi': 100,
         'edgecolor': 'white',
         'tight_layout': True,
-        'window_title': 'Dvol'
+        'window_title': 'dquant'
     },
 
     # ШРИФТЫ

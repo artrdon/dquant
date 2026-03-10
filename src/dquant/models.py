@@ -2,10 +2,9 @@ import joblib
 import re
 import onnxruntime as ort
 import os
-from time import sleep
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-from visual import Visualization
+import onnxmltools
+from onnxconverter_common.data_types import FloatTensorType
+from .visual import Visualization
 import time as time
 import numpy as np
 import xgboost
@@ -134,18 +133,6 @@ class FichEn:
             base_features.extend(['log_volume', 'volume_TR', 'volume_range'])
 
         if add_rolling:
-            """rolling_features = [
-                'ATR_5', 'ATR_10', 'ATR_20',
-                'TR_vs_ATR_5', 'TR_vs_ATR_10', 'TR_vs_ATR_20',
-                'return_std_5', 'return_std_10', 'return_std_20',
-                'abs_return_sma_5', 'abs_return_sma_10', 'abs_return_sma_20',
-                'dist_from_high_10', 'dist_from_high_20',
-                'dist_from_low_10', 'dist_from_low_20',
-                'bb_width_20'
-            ]
-            if include_volume:
-                rolling_features.extend(['volume_sma_5', 'volume_sma_10', 'volume_sma_20',
-                                         'volume_ratio_5', 'volume_ratio_10', 'volume_ratio_20'])"""
             base_features.extend(rolling_features)
 
         # Убираем NaN в начале (из-за скользящих окон и лагов)
@@ -205,10 +192,6 @@ class FichEn:
             add_rolling: bool = True,
             epsilon: float = 1e-10
     ) -> np.ndarray:
-        # Проверяем, что пришло ровно 20 свечей
-        #if len(df_window) != 20:
-        #    raise ValueError(f"Ожидается 20 свечей, получено {len(df_window)}")
-
         # Копируем, чтобы не портить оригинал
         data = df_window.copy()
 
@@ -335,24 +318,12 @@ class FichEn:
             base_features.extend(['log_volume', 'volume_TR', 'volume_range'])
 
         if add_rolling:
-            """rolling_features = [
-                'ATR_5', 'ATR_10', 'ATR_20',
-                'TR_vs_ATR_5', 'TR_vs_ATR_10', 'TR_vs_ATR_20',
-                'return_std_5', 'return_std_10', 'return_std_20',
-                'abs_return_sma_5', 'abs_return_sma_10', 'abs_return_sma_20',
-                'dist_from_high_10', 'dist_from_high_20',
-                'dist_from_low_10', 'dist_from_low_20',
-                'bb_width_20'
-            ]
-            if include_volume:
-                rolling_features.extend(['volume_sma_5', 'volume_sma_10', 'volume_sma_20',
-                                         'volume_ratio_5', 'volume_ratio_10', 'volume_ratio_20'])"""
             base_features.extend(rolling_features)
 
         data = data.fillna(0)
         feature_vector = []
 
-        for lag in range(window_in-1, -1, -1):  # от 19 до 0 (чтобы lag0 был последним/самым свежим)
+        for lag in range(window_in-1, -1, -1):
             for feat in base_features:
                 if feat in data.columns:
                     val = data[feat].iloc[-lag - 1] if lag < len(data) else 0
@@ -372,8 +343,8 @@ class FichEn:
         previous_error = 0
         previous_error_was_grow = False
 
-        train_errors = []
-        val_errors = []
+        self.train_errors = []
+        self.val_errors = []
 
         start = time.time()
         for i in range(1, trees_count+1):
@@ -432,7 +403,7 @@ class FichEn:
                 if previous_error_was_grow:
                     print(f'training stopped by early stopping on {i} trees')
                     if show_results:
-                        self.V.show_errors(train_errors, val_errors)
+                        self.V.show_errors(self.train_errors, self.val_errors)
                     self.is_fitted = True
                     return
                 else:
@@ -441,15 +412,15 @@ class FichEn:
 
             previous_error = var_val_error
 
-            train_errors.append(var_test_error)
-            val_errors.append(var_val_error)
+            self.train_errors.append(var_test_error)
+            self.val_errors.append(var_val_error)
             print('Train error:      ', var_test_error)
             print('Validation error: ', var_val_error)
             print(f"Затрачено времени: {time.time() - start} сек")
 
 
         if show_results:
-            self.V.show_errors(train_errors, val_errors)
+            self.V.show_errors(self.train_errors, self.val_errors)
 
         print('model is trained')
         self.is_fitted = True
@@ -497,6 +468,10 @@ class FichEn:
                     predictions.append(pred[0] if len(pred.shape) > 0 else pred)
 
             return np.array(predictions)
+
+
+    def show_train_results(self):
+        self.V.show_errors(self.train_errors, self.val_errors)
 
 
 
@@ -591,19 +566,6 @@ class VolClustGB(FichEn):
             input_info = session.get_inputs()[0]  # берем первый вход
 
             shape = input_info.shape
-            #print(f"Полная форма входа: {shape}")
-
-            # Определяем размер окна в зависимости от формата
-            if len(shape) == 3:  # (batch, channels, window)
-                window_size = shape[-1]
-            elif len(shape) == 2:  # (batch, features)
-                window_size = shape[-1]
-            elif len(shape) == 4:  # (batch, channels, height, width)
-                window_size = (shape[-2], shape[-1])  # для изображений
-            else:
-                window_size = shape[-1] if shape[-1] != 'batch' else shape[-2]
-
-            #print('window_size: ', window_size)
 
             self.loaded_models.append(session)
 
@@ -646,14 +608,13 @@ class VolClustXGB(FichEn):
             #print(f"Скалер сохранён: {scaler_path}")
 
         for i in range(len(self.models)):
-            onx = convert_sklearn(self.models[i], initial_types=initial_type, target_opset=12)
+            onx = onnxmltools.convert_xgboost(self.models[i], initial_types=initial_type, target_opset=12)
 
             # Формируем путь к файлу
             file_path = os.path.join(name, f"{name}_{i}.onnx")
 
-            # Сохраняем файл
-            with open(file_path, "wb") as f:
-                f.write(onx.SerializeToString())
+            onnxmltools.utils.save_model(onx, file_path)
+
 
 
     def load(self, name):
@@ -699,19 +660,6 @@ class VolClustXGB(FichEn):
             input_info = session.get_inputs()[0]  # берем первый вход
 
             shape = input_info.shape
-            #print(f"Полная форма входа: {shape}")
-
-            # Определяем размер окна в зависимости от формата
-            if len(shape) == 3:  # (batch, channels, window)
-                window_size = shape[-1]
-            elif len(shape) == 2:  # (batch, features)
-                window_size = shape[-1]
-            elif len(shape) == 4:  # (batch, channels, height, width)
-                window_size = (shape[-2], shape[-1])  # для изображений
-            else:
-                window_size = shape[-1] if shape[-1] != 'batch' else shape[-2]
-
-            #print('window_size: ', window_size)
 
             self.loaded_models.append(session)
 
@@ -756,14 +704,13 @@ class VolClustLightGB(FichEn):
             #print(f"Скалер сохранён: {scaler_path}")
 
         for i in range(len(self.models)):
-            onx = convert_sklearn(self.models[i], initial_types=initial_type, target_opset=12)
+            #onx = convert_sklearn(self.models[i], initial_types=initial_type, target_opset=12)
+            onx = onnxmltools.convert_lightgbm(self.models[i], initial_types=initial_type, zipmap=False, target_opset=12)
 
             # Формируем путь к файлу
             file_path = os.path.join(name, f"{name}_{i}.onnx")
 
-            # Сохраняем файл
-            with open(file_path, "wb") as f:
-                f.write(onx.SerializeToString())
+            onnxmltools.utils.save_model(onx, file_path)
 
 
     def load(self, name):
@@ -798,8 +745,6 @@ class VolClustLightGB(FichEn):
             model_files.append(numbers[i])
 
 
-        #print(f"Найдено моделей: {len(model_files)}")
-
         # Загружаем каждую модель
         for model_file in model_files:
             model_path = os.path.join(name, model_file)
@@ -809,19 +754,6 @@ class VolClustLightGB(FichEn):
             input_info = session.get_inputs()[0]  # берем первый вход
 
             shape = input_info.shape
-            #print(f"Полная форма входа: {shape}")
-
-            # Определяем размер окна в зависимости от формата
-            if len(shape) == 3:  # (batch, channels, window)
-                window_size = shape[-1]
-            elif len(shape) == 2:  # (batch, features)
-                window_size = shape[-1]
-            elif len(shape) == 4:  # (batch, channels, height, width)
-                window_size = (shape[-2], shape[-1])  # для изображений
-            else:
-                window_size = shape[-1] if shape[-1] != 'batch' else shape[-2]
-
-            #print('window_size: ', window_size)
 
             self.loaded_models.append(session)
 

@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dquant"
+version = "0.1.0"
+authors = [
+  { name="Denis Makarov" },
+]
+description = "ML library"
+#readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+# Зависимости, которые будут установлены вместе с вашей библиотекой
+dependencies = [
+    "cycler>=0.11.0",
+    "joblib>=1.2.0",
+    "lightgbm>=3.3.0",
+    "matplotlib>=3.5.0",
+    "numpy>=1.21.0",
+    "onnx>=1.14.0",
+    "onnxruntime>=1.15.0",
+    "pandas>=1.5.0",
+    "scikit-learn>=1.2.0",
+    "skl2onnx>=1.14.0",
+    "xgboost>=1.7.0",
+    "onnxconverter-common>=1.9.0",
+    "onnxmltools>=1.11.0"
+]
+# Если нужны опциональные зависимости (например, для разработки)
+#[project.optional-dependencies]
+#dev = ["pytest", "black"]
+
+[project.urls]
+Homepage = "https://github.com/artrdon/dquant"
+Issues = "https://github.com/artrdon/dquant/issues"
