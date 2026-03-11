@@ -1,3 +1,5 @@
+import matplotlib.pyplot as plt
+from statsmodels.stats.outliers_influence import variance_inflation_factor
 import joblib
 import re
 import onnxruntime as ort
@@ -22,318 +24,335 @@ warnings.filterwarnings('ignore', message='X does not have valid feature names')
 
 
 class FichEn:
-
-    def _FichEngine(self,
+    def _DataSplitting(self,
             df: pd.DataFrame,
             window_in: int,
             window_out: int,
             include_volume: bool = True,
-            add_rolling: bool = True,
-            epsilon: float = 1e-10
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         # Копируем, чтобы не портить оригинал
         data = df.copy()
 
-        # Проверяем наличие необходимых колонок
+        # Проверка колонок
         required = ['open', 'high', 'low', 'close']
         if include_volume:
             required.append('volume')
 
         for col in required:
             if col not in data.columns:
-                raise ValueError(f"Колонка '{col}' не найдена в DataFrame")
+                raise ValueError(f"Колонка '{col}' не найдена")
 
-        # === 1. Базовые фичи (всегда) ===
+        # === 1. Сначала создаем "сырые" окна ===
+        raw_windows_X = []  # список окон для входных данных
+        raw_windows_y = []  # список окон для целевых значений
 
-        # True Range
-        data['high_low'] = data['high'] - data['low']
-        data['high_close_prev'] = abs(data['high'] - data['close'].shift(1))
-        data['low_close_prev'] = abs(data['low'] - data['close'].shift(1))
-        data['TR'] = data[['high_low', 'high_close_prev', 'low_close_prev']].max(axis=1)
+        # Правильные индексы:
+        # от window_in до len(data)-window_out
+        for i in range(window_in, len(data) - window_out + 1):
+            # Входное окно: window_in свечей ДО момента i
+            x_window = data.iloc[i - window_in:i]
 
-        # Простой диапазон (как запасной вариант)
-        data['range'] = data['high'] - data['low']
+            # Выходное окно: window_out свечей ПОСЛЕ момента i
+            y_window = data.iloc[i:i + window_out]
 
-        # Доходности
-        data['return'] = np.log(data['close'] / data['close'].shift(1))
-        data['abs_return'] = abs(data['return'])
-        data['return_squared'] = data['return'] ** 2
-
-        # Структура свечи
-        data['body'] = abs(data['close'] - data['open'])
-        data['upper_shadow'] = data['high'] - data[['open', 'close']].max(axis=1)
-        data['lower_shadow'] = data[['open', 'close']].min(axis=1) - data['low']
-        data['body_to_range'] = data['body'] / (data['range'] + epsilon)
-        data['shadow_to_body'] = (data['upper_shadow'] + data['lower_shadow']) / (data['body'] + epsilon)
-
-        # Позиция закрытия
-        data['close_position'] = (data['close'] - data['low']) / (data['range'] + epsilon)
-
-        # Гэпы
-        data['gap'] = data['open'] - data['close'].shift(1)
-        data['abs_gap'] = abs(data['gap'])
-
-        # === 2. Объёмные фичи (если нужно) ===
-        if include_volume:
-            data['log_volume'] = np.log(data['volume'] + 1)
-            data['volume_TR'] = data['volume'] * data['TR']
-            data['volume_range'] = data['volume'] * data['range']
-
-        # === 3. Скользящие статистики (если нужно) ===
-        rolling_features = []
-        if add_rolling:
-            # ATR для разных периодов
-            for period in list(range(5, window_in+1, 5)):
-                data[f'ATR_{period}'] = data['TR'].rolling(window=period, min_periods=1).mean()
-                data[f'TR_vs_ATR_{period}'] = data['TR'] / (data[f'ATR_{period}'] + epsilon)
-                rolling_features.append(f'ATR_{period}')
-                rolling_features.append(f'TR_vs_ATR_{period}')
-
-            # Стандартное отклонение доходностей
-            for period in list(range(5, window_in+1, 5)):
-                data[f'return_std_{period}'] = data['return'].rolling(window=period, min_periods=1).std()
-                data[f'abs_return_sma_{period}'] = data['abs_return'].rolling(window=period, min_periods=1).mean()
-                rolling_features.append(f'return_std_{period}')
-                rolling_features.append(f'abs_return_sma_{period}')
-
-            # Скользящие средние объёма
-            if include_volume:
-                for period in list(range(5, window_in+1, 5)):
-                    data[f'volume_sma_{period}'] = data['volume'].rolling(window=period, min_periods=1).mean()
-                    data[f'volume_ratio_{period}'] = data['volume'] / (data[f'volume_sma_{period}'] + epsilon)
-                    rolling_features.append(f'volume_sma_{period}')
-                    rolling_features.append(f'volume_ratio_{period}')
-
-        # Макро-состояние
-        for period in list(range(10, window_in+1, 10)):
-            data[f'dist_from_high_{period}'] = (data['high'].rolling(window=period, min_periods=1).max() - data[
-                'close']) / (
-                                                       data['range'] + epsilon)
-            data[f'dist_from_low_{period}'] = (data['close'] - data['low'].rolling(window=period,
-                                                                                   min_periods=1).min()) / (
-                                                      data['range'] + epsilon)
-            rolling_features.append(f'dist_from_high_{period}')
-            rolling_features.append(f'dist_from_low_{period}')
-
-        # Полосы Боллинджера (ширина)
-        for period in [window_in]:
-            sma = data['close'].rolling(window=period, min_periods=1).mean()
-            std = data['close'].rolling(window=period, min_periods=1).std()
-            data[f'bb_width_{period}'] = (sma + 2 * std - (sma - 2 * std)) / (sma + epsilon)
-            rolling_features.append(f'bb_width_{period}')
-
-        # Список фичей, которые будем лагировать
-        base_features = [
-            'TR', 'range', 'return', 'abs_return', 'return_squared',
-            'body', 'upper_shadow', 'lower_shadow', 'body_to_range',
-            'shadow_to_body', 'close_position', 'gap', 'abs_gap'
-        ]
-
-        if include_volume:
-            base_features.extend(['log_volume', 'volume_TR', 'volume_range'])
-
-        if add_rolling:
-            base_features.extend(rolling_features)
-
-        # Убираем NaN в начале (из-за скользящих окон и лагов)
-        data = data.dropna().reset_index(drop=True)
-
-        # === 4. Создаём плоское окно с лагами ===
-        X_rows = []
-        y_rows = []
-
-        # Минимальное количество данных для одной строки
-        min_rows_needed = window_in + window_out
-
-        for i in range(len(data) - min_rows_needed + 1):
-            # Входное окно: i : i+window_in
-            window = data.iloc[i: i + window_in]
-
-            # Таргет: следующие window_out значений TR
-            target = data['TR'].iloc[i + window_in: i + window_in + window_out].values
-
-            # Проверяем, что таргет полный (нет NaN)
-            if len(target) == window_out and not np.any(np.isnan(target)):
-                # Собираем фичи: для каждой базовой фичи берём все window_in значений
-                row = []
-                for feat in base_features:
-                    if feat in data.columns:
-                        values = window[feat].values
-                        # Дополнительно проверяем на NaN
-                        if np.any(np.isnan(values)):
-                            break
-                        row.extend(values)
-                else:  # выполнится, если не было break (все фичи ок)
-                    X_rows.append(row)
-                    y_rows.append(target)
-
-        # Создаём имена колонок
-        feature_names = []
-        for feat in base_features:
-            if feat in data.columns:
-                for lag in range(window_in):
-                    feature_names.append(f'{feat}_lag{window_in - 1 - lag}')  # lag0 - самая свежая
+            raw_windows_X.append(x_window)
+            raw_windows_y.append(y_window)
 
         # Преобразуем в numpy массивы
-        X = np.array(X_rows)
-        y = np.array(y_rows)
+        X = raw_windows_X
+        y = raw_windows_y
 
-        print(f"Создано {X.shape[0]} примеров")
-        print(f"Вход: {X.shape[1]} фичей")
-        print(f"Выход: {y.shape[1]} шагов")
+        #print(f"Создано {X.shape[0]} примеров")
+        #print(f"Вход: {X.shape[1]} фичей")
+        #print(f"Выход: {y.shape[1]} шагов")
 
         #return X, y, feature_names
         return X, y
 
     def _prepare_single_window_features(self,
-            df_window: pd.DataFrame,
-            window_in: int,
-            include_volume: bool = True,
-            add_rolling: bool = True,
-            epsilon: float = 1e-10
-    ) -> np.ndarray:
-        # Копируем, чтобы не портить оригинал
-        data = df_window.copy()
+                                        df_window: pd.DataFrame,
+                                        window_in: int,
+                                        include_volume: bool = True,
+                                        add_rolling: bool = True,
+                                        epsilon: float = 1e-10
+                                        ) -> np.ndarray:
+        # Копируем и сбрасываем индекс
+        data = df_window.copy().reset_index(drop=True)
 
-        # Проверяем наличие необходимых колонок
+        # Проверка колонок
         required = ['open', 'high', 'low', 'close']
         if include_volume:
             required.append('volume')
 
         for col in required:
             if col not in data.columns:
-                raise ValueError(f"Колонка '{col}' не найдена в DataFrame")
+                raise ValueError(f"Колонка '{col}' не найдена")
 
-        # === 1. Базовые фичи (расчёт на всём окне) ===
+        close_price = data['close'].values
 
-        # True Range
-        data['high_low'] = data['high'] - data['low']
+        # === 1. БАЗОВЫЕ ФИЧИ (самое важное для волатильности) ===
 
-        # Для первой свечи нет предыдущей, берём её же (или 0)
-        prev_close = data['close'].shift(1)
-        prev_close.iloc[0] = data['close'].iloc[0]  # для первой свечи
+        # TR и его компоненты
+        data['high_low'] = (data['high'] - data['low']) / (close_price + epsilon)
+        prev_close = data['close'].shift(1).fillna(data['close'])
+        data['TR'] = np.maximum(
+            data['high_low'],
+            np.maximum(
+                abs(data['high'] - prev_close) / (close_price + epsilon),
+                abs(data['low'] - prev_close) / (close_price + epsilon)
+            )
+        )
 
-        data['high_close_prev'] = abs(data['high'] - prev_close)
-        data['low_close_prev'] = abs(data['low'] - prev_close)
-        data['TR'] = data[['high_low', 'high_close_prev', 'low_close_prev']].max(axis=1)
+        # Доходности (основа волатильности)
+        data['return'] = np.log(data['close'] / data['close'].shift(1)).fillna(0)
+        data['abs_return'] = data['return'].abs()
 
-        # Простой диапазон
-        data['range'] = data['high'] - data['low']
+        # Гэпы (важно для волатильности)
+        data['gap'] = (data['open'] - data['close'].shift(1)).fillna(0) / (close_price + epsilon)
 
-        # Доходности
-        data['return'] = np.log(data['close'] / data['close'].shift(1))#.fillna(0)
-        data['return'].loc[0] = 0  # для первой свечи-------------------------------------------------
-        data['abs_return'] = abs(data['return'])
-        data['return_squared'] = data['return'] ** 2
+        # Структура свечи (упрощенно)
+        data['body'] = abs(data['close'] - data['open']) / (close_price + epsilon)
+        data['shadow'] = (data['high'] - data[['open', 'close']].max(axis=1) +
+                          (data[['open', 'close']].min(axis=1) - data['low'])) / (close_price + epsilon)
 
-        # Структура свечи
-        data['body'] = abs(data['close'] - data['open'])
-        data['upper_shadow'] = data['high'] - data[['open', 'close']].max(axis=1)
-        data['lower_shadow'] = data[['open', 'close']].min(axis=1) - data['low']
-        data['body_to_range'] = data['body'] / (data['range'] + epsilon)
-        data['shadow_to_body'] = (data['upper_shadow'] + data['lower_shadow']) / (data['body'] + epsilon)
+        # Позиция в свече (информативно для разворота волатильности)
+        data['close_position'] = (data['close'] - data['low']) / (data['high'] - data['low'] + epsilon)
 
-        # Позиция закрытия
-        data['close_position'] = (data['close'] - data['low']) / (data['range'] + epsilon)
-
-        # Гэпы
-        data['gap'] = (data['open'] - data['close'].shift(1))#.fillna(0)
-        data['gap'].loc[0] = 0 #--------------------------------------------
-        data['abs_gap'] = abs(data['gap'])
-
-        # === 2. Объёмные фичи ===
+        # === 2. ОБЪЁМНЫЕ ФИЧИ ===
         if include_volume:
-            data['log_volume'] = np.log(data['volume'] + 1)
-            data['volume_TR'] = data['volume'] * data['TR']
-            data['volume_range'] = data['volume'] * data['range']
+            data['log_volume'] = np.log1p(data['volume'])
+            data['volume_ratio'] = data['volume'] / data['volume'].rolling(5, min_periods=1).mean().fillna(
+                data['volume'])
+            data['volume_TR'] = data['log_volume'] * data['TR']  # взаимодействие объема и волатильности
 
-        print('window_in: ', window_in)
-        # === 3. Скользящие статистики (на маленьком окне — приближённо) ===
+        # === 3. СКОЛЬЗЯЩИЕ СТАТИСТИКИ (только самые важные периоды) ===
         rolling_features = []
         if add_rolling:
-            # Используем expanding вместо rolling, так как окно маленькое
-            # ATR-like
-            for period in list(range(5, window_in+1, 5)):
-                data[f'ATR_{period}'] = data['TR'].rolling(window=period, min_periods=1).mean()
-                data[f'TR_vs_ATR_{period}'] = data['TR'] / (data[f'ATR_{period}'] + epsilon)
-                rolling_features.append(f'ATR_{period}')
-                rolling_features.append(f'TR_vs_ATR_{period}')
+            # ВАЖНО: только 3 ключевых периода
+            key_periods = list(range(5, window_in, 10))
 
-            # Стандартное отклонение доходностей
-            for period in list(range(5, window_in+1, 5)):
-                data[f'return_std_{period}'] = data['return'].rolling(window=period, min_periods=1).std()
-                data[f'abs_return_sma_{period}'] = data['abs_return'].rolling(window=period, min_periods=1).mean()
-                rolling_features.append(f'return_std_{period}')
-                rolling_features.append(f'abs_return_sma_{period}')
+            for period in key_periods:
+                if period <= len(data):
+                    # ATR (сглаженная волатильность)
+                    data[f'ATR_{period}'] = data['TR'].rolling(period, min_periods=1).mean()
 
-            # Скользящие средние объёма
-            if include_volume:
-                for period in list(range(5, window_in+1, 5)):
-                    data[f'volume_sma_{period}'] = data['volume'].rolling(window=period, min_periods=1).mean()
-                    data[f'volume_ratio_{period}'] = data['volume'] / (data[f'volume_sma_{period}'] + epsilon)
-                    rolling_features.append(f'volume_sma_{period}')
-                    rolling_features.append(f'volume_ratio_{period}')
+                    # Относительная волатильность (текущая vs историческая)
+                    data[f'vol_ratio_{period}'] = data['TR'] / (data[f'ATR_{period}'] + epsilon)
 
-        # Объёмные скользящие
+                    # Историческая волатильность (на основе доходностей)
+                    data[f'hist_vol_{period}'] = data['return'].rolling(period, min_periods=1).std() * np.sqrt(252)
 
-        # Макро-состояние (на доступных данных)
+                    rolling_features.extend([f'ATR_{period}', f'vol_ratio_{period}', f'hist_vol_{period}'])
 
-        for period in list(range(10, window_in+1, 10)):
-            if period <= len(data):
-                data[f'dist_from_high_{period}'] = (data['high'].rolling(window=period, min_periods=1).max() - data[
-                    'close']) / (
-                                                           data['range'] + epsilon)
-                data[f'dist_from_low_{period}'] = (data['close'] - data['low'].rolling(window=period,
-                                                                                       min_periods=1).min()) / (
-                                                          data['range'] + epsilon)
-                rolling_features.append(f'dist_from_high_{period}')
-                rolling_features.append(f'dist_from_low_{period}')
-            else:
-                data[f'dist_from_high_{period}'] = 0
-                data[f'dist_from_low_{period}'] = 0
-                rolling_features.append(f'dist_from_high_{period}')
-                rolling_features.append(f'dist_from_low_{period}')
+                    # Макро-позиция (где мы в диапазоне)
+                    if period >= 10:
+                        high_max = data['high'].rolling(period, min_periods=1).max()
+                        low_min = data['low'].rolling(period, min_periods=1).min()
+                        data[f'range_position_{period}'] = (data['close'] - low_min) / (high_max - low_min + epsilon)
+                        rolling_features.append(f'range_position_{period}')
 
-        # Полосы Боллинджера (ширина)
-        for period in [window_in]:
-            if len(data) >= period:
-                sma = data['close'].rolling(window=period, min_periods=1).mean()
-                std = data['close'].rolling(window=period, min_periods=1).std()
-                data[f'bb_width_{period}'] = (sma + 2 * std - (sma - 2 * std)) / (sma + epsilon)
-                rolling_features.append(f'bb_width_{period}')
-            else:
-                data[f'bb_width_{period}'] = 0
-                rolling_features.append(f'bb_width_{period}')
+            # Дополнительные фичи для волатильности
+            if len(data) >= 5:
+                # Скачки волатильности
+                data['TR_change'] = data['TR'].pct_change().fillna(0)
+                rolling_features.append('TR_change')
 
-        # === 4. Формируем список фичей в правильном порядке ===
-        # ВАЖНО: порядок должен строго соответствовать порядку из обучающей функции!
+                # Кластеризация волатильности (если TR > среднего за 5 дней)
+                data['vol_spike'] = (data['TR'] > data['TR'].rolling(5, min_periods=1).mean().shift(1)).astype(float)
+                rolling_features.append('vol_spike')
 
+        # === 4. ФИНАЛЬНЫЙ СПИСОК ФИЧЕЙ (ОПТИМИЗИРОВАННЫЙ) ===
         base_features = [
-            'TR', 'range', 'return', 'abs_return', 'return_squared',
-            'body', 'upper_shadow', 'lower_shadow', 'body_to_range',
-            'shadow_to_body', 'close_position', 'gap', 'abs_gap'
+            'TR',  # базовая волатильность
+            'return',  # доходность
+            'abs_return',  # абсолютная доходность
+            'gap',  # гэпы
+            'body',  # тело свечи
+            'shadow',  # тени
+            'close_position'  # позиция закрытия
         ]
 
         if include_volume:
-            base_features.extend(['log_volume', 'volume_TR', 'volume_range'])
+            base_features.extend(['log_volume', 'volume_ratio', 'volume_TR'])
 
         if add_rolling:
             base_features.extend(rolling_features)
 
-        data = data.fillna(0)
-        feature_vector = []
+        # Оставляем только существующие колонки
+        existing_features = [f for f in base_features if f in data.columns]
 
-        for lag in range(window_in-1, -1, -1):
-            for feat in base_features:
-                if feat in data.columns:
-                    val = data[feat].iloc[-lag - 1] if lag < len(data) else 0
-                    feature_vector.append(val)
+        # Заполняем NaN
+        data = data.fillna(0)
+
+        # Собираем фичи (берем ВСЕ свечи в окне)
+        feature_vector = []
+        for i in range(len(data)):
+            for feat in existing_features:
+                feature_vector.append(data[feat].iloc[i])
 
         return np.array(feature_vector)
 
+    def _prepare_single_window_target(self,
+                                      df_window: pd.DataFrame,
+                                      epsilon: float = 1e-10
+                                      ) -> np.ndarray:
+        """
+        Возвращает массив True Range для каждой свечи в окне
+        """
+        data = df_window.copy()
 
-    def fit(self, data, input_bars, horizons, trees_count, show_results=False):
-        x, y = self._FichEngine(data, input_bars, horizons, False, False)
+        required = ['open', 'high', 'low', 'close']
+
+        for col in required:
+            if col not in data.columns:
+                raise ValueError(f"Колонка '{col}' не найдена")
+
+        # Расчет TR для каждой свечи
+        tr_values = []
+
+        for i in range(len(data)):
+            if i == 0:
+                # Для первой свечи используем только high-low
+                tr = (data['high'].iloc[i] - data['low'].iloc[i]) / data['close'].iloc[i]
+            else:
+                hl = data['high'].iloc[i] - data['low'].iloc[i]
+                hc = abs(data['high'].iloc[i] - data['close'].iloc[i - 1])
+                lc = abs(data['low'].iloc[i] - data['close'].iloc[i - 1])
+                tr = max(hl/data['close'].iloc[i], hc/data['close'].iloc[i], lc/data['close'].iloc[i])
+
+            tr_values.append(tr)
+
+        return np.array(tr_values)
+
+    def quick_correlation_analysis(self, X, threshold=0.95):
+        """
+        Быстрый анализ корреляций без VIF (для большого числа фичей)
+        """
+        n_features = X.shape[1]
+        print(f"Анализ корреляций для {n_features} фичей")
+
+        # 1. Удаляем фичи с нулевой дисперсией
+        std_devs = X.std(axis=0)
+        constant_features = np.where(std_devs < 1e-10)[0]
+
+        if len(constant_features) > 0:
+            print(f"Найдено {len(constant_features)} фичей с нулевой дисперсией (удаляем из анализа)")
+            # Удаляем константные фичи
+            X_clean = X[:, std_devs >= 1e-10]
+            n_features_clean = X_clean.shape[1]
+        else:
+            X_clean = X
+            n_features_clean = n_features
+
+        # 2. Стандартизация с защитой от нулевой дисперсии
+        X_std = (X_clean - X_clean.mean(axis=0)) / (X_clean.std(axis=0) + 1e-10)
+
+        # 3. Быстрый расчет корреляционной матрицы
+        corr_matrix = np.corrcoef(X_std.T)
+
+        # 4. Находим высокие корреляции
+        high_corr_pairs = []
+        for i in range(n_features_clean):
+            for j in range(i + 1, n_features_clean):
+                corr_val = corr_matrix[i, j]
+                if not np.isnan(corr_val) and abs(corr_val) > threshold:
+                    high_corr_pairs.append((i, j, corr_val))
+
+        print(f"\nНайдено {len(high_corr_pairs)} пар с корреляцией > {threshold}")
+
+        # 5. Статистика
+        if len(high_corr_pairs) > 0:
+            corr_values = [p[2] for p in high_corr_pairs]
+            print(f"Средняя корреляция в проблемных парах: {np.mean(corr_values):.3f}")
+            print(f"Максимальная корреляция: {np.max(corr_values):.3f}")
+
+            # Покажем первые 10 проблемных пар
+            print("\nПримеры высококоррелированных пар:")
+            for i, (f1, f2, corr) in enumerate(high_corr_pairs[:10]):
+                print(f"  Фича {f1} - Фича {f2}: {corr:.3f}")
+
+        # 6. Визуализация
+        fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+        # Гистограмма корреляций (игнорируем NaN)
+        corr_flat = corr_matrix[np.triu_indices_from(corr_matrix, k=1)]
+        corr_flat = corr_flat[~np.isnan(corr_flat)]  # убираем NaN
+
+        axes[0].hist(corr_flat, bins=50, edgecolor='black', alpha=0.7)
+        axes[0].axvline(x=threshold, color='r', linestyle='--', label=f'threshold={threshold}')
+        axes[0].axvline(x=-threshold, color='r', linestyle='--')
+        axes[0].set_xlabel('Корреляция')
+        axes[0].set_ylabel('Частота')
+        axes[0].set_title(f'Распределение корреляций (всего {len(corr_flat)} пар)')
+        axes[0].legend()
+
+        # Тепловая карта
+        if n_features_clean > 100:
+            # Показываем только первые 100 фичей
+            corr_small = corr_matrix[:100, :100]
+            im = axes[1].imshow(corr_small, cmap='RdBu_r', vmin=-1, vmax=1, aspect='auto')
+            plt.colorbar(im, ax=axes[1])
+            axes[1].set_title('Корреляции (первые 100 фичей)')
+        else:
+            im = axes[1].imshow(corr_matrix, cmap='RdBu_r', vmin=-1, vmax=1, aspect='auto')
+            plt.colorbar(im, ax=axes[1])
+            axes[1].set_title('Полная корреляционная матрица')
+
+        plt.tight_layout()
+        plt.show()
+
+        return corr_matrix, high_corr_pairs
+
+
+    def fit(self, data, input_bars, horizont, trees_count, show_results=False, feature_func=None, target_func=None):
+        x, y = self._DataSplitting(data, input_bars, horizont, False)
+        XX = []
+        YY = []
+        lx = len(x)
+        done_percent = 0.0
+        if len(x) != len(y): raise "pizdec"
+        time_per = 0
+        for i in range(len(x)):
+            startt = time.time()
+            if feature_func == None:
+                window_features = self._prepare_single_window_features(
+                    x[i],  # преобразуем обратно в DataFrame
+                    input_bars,
+                    include_volume=False,  # должно соответствовать _DataSplitting
+                    add_rolling=True
+                )
+            else:
+                window_features = feature_func(x[i])
+
+            if target_func == None:
+                window_targets = self._prepare_single_window_target(
+                    y[i],
+                    False
+                )
+            else:
+                window_targets = target_func(x[i])
+
+            XX.append(window_features)
+            YY.append(window_targets)
+
+            percent = (float(i) / lx) * 100
+            filled_chars = int((i / lx) * 50)  # Допустим, бар шириной 50 символов
+            bar = '█' * filled_chars + '░' * (50 - filled_chars)
+            time_per = time.time() - startt
+            if percent < 10:
+                print(f'\rПодготовка данных: |{bar}|   {percent:.2f}%  Осталось {time_per*(lx-i):.2f} секунд', end='', flush=True)
+            elif percent >= 10 and percent < 100:
+                print(f'\rПодготовка данных: |{bar}|  {percent:.2f}%   Осталось {time_per*(lx-i):.2f} секунд', end='', flush=True)
+            else:
+                print(f'\rПодготовка данных: |{bar}| {percent:.2f}%    Осталось {time_per*(lx-i):.2f} секунд', end='', flush=True)
+
+
+        x = np.array(XX)
+        y = np.array(YY)
+        print(f"Создано {x.shape[0]} примеров")
+        print(f"Вход: {x.shape[1]} фичей")
+        print(f"Выход: {y.shape[1]} шагов")
+        self.quick_correlation_analysis(x)
         X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2, shuffle=False, random_state=42)
         X_scaled = self.scaler.fit_transform(X_train)
         X_test_scaled = self.scaler.transform(X_test)
@@ -345,79 +364,83 @@ class FichEn:
 
         self.train_errors = []
         self.val_errors = []
-
+        trees = 1
         start = time.time()
-        for i in range(1, trees_count+1):
-            print(f'{i} trees')
-            t_error = 0
-            v_error = 0
-            # Определяем горизонты
-            if isinstance(horizons, int):
-                horizons_list = list(range(horizons))
-            else:
-                horizons_list = horizons
-
-            # Если y - 2D (уже с горизонтами)
-            if len(y_train.shape) == 2 and y_train.shape[1] > 1:
-                for h_idx, h in enumerate(horizons_list):
-                    if h_idx >= y_train.shape[1]:
-                        print(f"Предупреждение: горизонт {h} выходит за пределы y, пропускаем")
-                        continue
-
-                    # Берем конкретную колонку для этого горизонта
-                    y_h = y_train.iloc[:, h_idx] if hasattr(y_train, 'iloc') else y_train[:, h_idx]
-
-                    # Убираем NaN
-                    valid_mask = ~pd.isna(y_h) if hasattr(y_h, 'isna') else ~np.isnan(y_h)
-                    X_h = X_scaled[valid_mask]
-                    y_h_clean = y_h[valid_mask]
-
-                    # Обучаем модель
-                    if i != 1:
-                        self.models[h_idx].set_params(n_estimators=i)
-                        self.models[h_idx].fit(X_h, y_h_clean)
-                    else:
-                        model = self.base_model.__class__(**self.base_model.get_params())
-                        model.n_estimators = i
-                        model.fit(X_h, y_h_clean)
-                        self.models.append(model)
-
-                    y_h_v = y_test.iloc[:, h_idx] if hasattr(y_test, 'iloc') else y_test[:, h_idx]
-
-                    # Убираем NaN
-                    valid_mask = ~pd.isna(y_h_v) if hasattr(y_h_v, 'isna') else ~np.isnan(y_h_v)
-                    X_h_v = X_test_scaled[valid_mask]
-                    y_h_v_clean = y_h_v[valid_mask]
-                    if i != 1:
-                        t_error += mean_squared_error(y_h_clean, self.models[h_idx].predict(X_h))
-                        v_error += mean_squared_error(y_h_v_clean, self.models[h_idx].predict(X_h_v))
-                    else:
-                        t_error += mean_squared_error(y_h_clean, model.predict(X_h))
-                        v_error += mean_squared_error(y_h_v_clean, model.predict(X_h_v))
-
-
-            var_test_error = float(t_error)/horizons
-            var_val_error = float(v_error)/horizons
-
-            if self.early_stopping:
-                if previous_error_was_grow:
-                    print(f'training stopped by early stopping on {i} trees')
-                    if show_results:
-                        self.V.show_errors(self.train_errors, self.val_errors)
-                    self.is_fitted = True
-                    return
+        try:
+            for i in range(trees, trees_count+1):
+                print(f'{i} trees')
+                trees = i
+                t_error = 0
+                v_error = 0
+                # Определяем горизонты
+                if isinstance(horizont, int):
+                    horizont_list = list(range(horizont))
                 else:
-                    if previous_error != 0 and previous_error < var_val_error:
-                        previous_error_was_grow = True
+                    horizont_list = horizont
 
-            previous_error = var_val_error
+                # Если y - 2D (уже с горизонтами)
+                if len(y_train.shape) == 2 and y_train.shape[1] > 1:
+                    for h_idx, h in enumerate(horizont_list):
+                        if h_idx >= y_train.shape[1]:
+                            print(f"Предупреждение: горизонт {h} выходит за пределы y, пропускаем")
+                            continue
 
-            self.train_errors.append(var_test_error)
-            self.val_errors.append(var_val_error)
-            print('Train error:      ', var_test_error)
-            print('Validation error: ', var_val_error)
-            print(f"Затрачено времени: {time.time() - start} сек")
+                        # Берем конкретную колонку для этого горизонта
+                        y_h = y_train.iloc[:, h_idx] if hasattr(y_train, 'iloc') else y_train[:, h_idx]
 
+                        # Убираем NaN
+                        valid_mask = ~pd.isna(y_h) if hasattr(y_h, 'isna') else ~np.isnan(y_h)
+                        X_h = X_scaled[valid_mask]
+                        y_h_clean = y_h[valid_mask]
+
+                        # Обучаем модель
+                        if i != 1:
+                            self.models[h_idx].set_params(n_estimators=i)
+                            self.models[h_idx].fit(X_h, y_h_clean)
+                        else:
+                            model = self.base_model.__class__(**self.base_model.get_params())
+                            model.n_estimators = i
+                            model.fit(X_h, y_h_clean)
+                            self.models.append(model)
+
+                        y_h_v = y_test.iloc[:, h_idx] if hasattr(y_test, 'iloc') else y_test[:, h_idx]
+
+                        # Убираем NaN
+                        valid_mask = ~pd.isna(y_h_v) if hasattr(y_h_v, 'isna') else ~np.isnan(y_h_v)
+                        X_h_v = X_test_scaled[valid_mask]
+                        y_h_v_clean = y_h_v[valid_mask]
+                        if i != 1:
+                            t_error += mean_squared_error(y_h_clean, self.models[h_idx].predict(X_h))
+                            v_error += mean_squared_error(y_h_v_clean, self.models[h_idx].predict(X_h_v))
+                        else:
+                            t_error += mean_squared_error(y_h_clean, model.predict(X_h))
+                            v_error += mean_squared_error(y_h_v_clean, model.predict(X_h_v))
+
+
+                var_test_error = float(t_error)/horizont
+                var_val_error = float(v_error)/horizont
+
+                if self.early_stopping:
+                    if previous_error_was_grow:
+                        print(f'training stopped by early stopping on {i} trees')
+                        if show_results:
+                            self.V.show_errors(self.train_errors, self.val_errors)
+                        self.is_fitted = True
+                        return
+                    else:
+                        if previous_error != 0 and previous_error < var_val_error:
+                            previous_error_was_grow = True
+
+                previous_error = var_val_error
+
+                self.train_errors.append(var_test_error)
+                self.val_errors.append(var_val_error)
+                print('Train error:      ', var_test_error)
+                print('Validation error: ', var_val_error)
+                print(f"Затрачено времени: {time.time() - start} сек")
+
+        except KeyboardInterrupt:
+            print("\nОбучение прервано по Ctrl+C!")
 
         if show_results:
             self.V.show_errors(self.train_errors, self.val_errors)
@@ -425,8 +448,12 @@ class FichEn:
         print('model is trained')
         self.is_fitted = True
 
-    def forecast(self, latest_data):
-        X = self._prepare_single_window_features(latest_data, len(latest_data), False, False)
+    def forecast(self, latest_data, feature_func=None):
+        if feature_func == None:
+            X = self._prepare_single_window_features(latest_data, len(latest_data), False, True)
+        else:
+            X = feature_func(latest_data)
+
         if not self.is_fitted and not self.onnx_load:
             raise ValueError("Модель еще не обучена!")
 
