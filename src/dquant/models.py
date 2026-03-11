@@ -69,20 +69,12 @@ class FichEn:
         #return X, y, feature_names
         return X, y
 
-    def _prepare_single_window_features(self,
-                                        df_window: pd.DataFrame,
-                                        window_in: int,
-                                        include_volume: bool = True,
-                                        add_rolling: bool = True,
-                                        epsilon: float = 1e-10
-                                        ) -> np.ndarray:
+    def _prepare_single_window_features(self, df_window: pd.DataFrame, epsilon: float = 1e-10) -> np.ndarray:
         # Копируем и сбрасываем индекс
         data = df_window.copy().reset_index(drop=True)
 
         # Проверка колонок
         required = ['open', 'high', 'low', 'close']
-        if include_volume:
-            required.append('volume')
 
         for col in required:
             if col not in data.columns:
@@ -118,49 +110,6 @@ class FichEn:
         # Позиция в свече (информативно для разворота волатильности)
         data['close_position'] = (data['close'] - data['low']) / (data['high'] - data['low'] + epsilon)
 
-        # === 2. ОБЪЁМНЫЕ ФИЧИ ===
-        if include_volume:
-            data['log_volume'] = np.log1p(data['volume'])
-            data['volume_ratio'] = data['volume'] / data['volume'].rolling(5, min_periods=1).mean().fillna(
-                data['volume'])
-            data['volume_TR'] = data['log_volume'] * data['TR']  # взаимодействие объема и волатильности
-
-        # === 3. СКОЛЬЗЯЩИЕ СТАТИСТИКИ (только самые важные периоды) ===
-        rolling_features = []
-        if add_rolling:
-            # ВАЖНО: только 3 ключевых периода
-            key_periods = list(range(5, window_in, 10))
-
-            for period in key_periods:
-                if period <= len(data):
-                    # ATR (сглаженная волатильность)
-                    data[f'ATR_{period}'] = data['TR'].rolling(period, min_periods=1).mean()
-
-                    # Относительная волатильность (текущая vs историческая)
-                    data[f'vol_ratio_{period}'] = data['TR'] / (data[f'ATR_{period}'] + epsilon)
-
-                    # Историческая волатильность (на основе доходностей)
-                    data[f'hist_vol_{period}'] = data['return'].rolling(period, min_periods=1).std() * np.sqrt(252)
-
-                    rolling_features.extend([f'ATR_{period}', f'vol_ratio_{period}', f'hist_vol_{period}'])
-
-                    # Макро-позиция (где мы в диапазоне)
-                    if period >= 10:
-                        high_max = data['high'].rolling(period, min_periods=1).max()
-                        low_min = data['low'].rolling(period, min_periods=1).min()
-                        data[f'range_position_{period}'] = (data['close'] - low_min) / (high_max - low_min + epsilon)
-                        rolling_features.append(f'range_position_{period}')
-
-            # Дополнительные фичи для волатильности
-            if len(data) >= 5:
-                # Скачки волатильности
-                data['TR_change'] = data['TR'].pct_change().fillna(0)
-                rolling_features.append('TR_change')
-
-                # Кластеризация волатильности (если TR > среднего за 5 дней)
-                data['vol_spike'] = (data['TR'] > data['TR'].rolling(5, min_periods=1).mean().shift(1)).astype(float)
-                rolling_features.append('vol_spike')
-
         # === 4. ФИНАЛЬНЫЙ СПИСОК ФИЧЕЙ (ОПТИМИЗИРОВАННЫЙ) ===
         base_features = [
             'TR',  # базовая волатильность
@@ -171,12 +120,6 @@ class FichEn:
             'shadow',  # тени
             'close_position'  # позиция закрытия
         ]
-
-        if include_volume:
-            base_features.extend(['log_volume', 'volume_ratio', 'volume_TR'])
-
-        if add_rolling:
-            base_features.extend(rolling_features)
 
         # Оставляем только существующие колонки
         existing_features = [f for f in base_features if f in data.columns]
@@ -192,10 +135,8 @@ class FichEn:
 
         return np.array(feature_vector)
 
-    def _prepare_single_window_target(self,
-                                      df_window: pd.DataFrame,
-                                      epsilon: float = 1e-10
-                                      ) -> np.ndarray:
+
+    def _prepare_single_window_target(self, df_window: pd.DataFrame) -> np.ndarray:
         """
         Возвращает массив True Range для каждой свечи в окне
         """
@@ -223,6 +164,7 @@ class FichEn:
             tr_values.append(tr)
 
         return np.array(tr_values)
+
 
     def quick_correlation_analysis(self, X, threshold=0.95):
         """
@@ -305,30 +247,20 @@ class FichEn:
 
 
     def fit(self, data, input_bars, horizont, trees_count, show_results=False, feature_func=None, target_func=None):
-        x, y = self._DataSplitting(data, input_bars, horizont, False)
+        x, y = self._DataSplitting(data, input_bars, horizont, True)
         XX = []
         YY = []
         lx = len(x)
-        done_percent = 0.0
         if len(x) != len(y): raise "pizdec"
-        time_per = 0
         for i in range(len(x)):
             startt = time.time()
             if feature_func == None:
-                window_features = self._prepare_single_window_features(
-                    x[i],  # преобразуем обратно в DataFrame
-                    input_bars,
-                    include_volume=False,  # должно соответствовать _DataSplitting
-                    add_rolling=True
-                )
+                window_features = self._prepare_single_window_features(x[i])
             else:
                 window_features = feature_func(x[i])
 
             if target_func == None:
-                window_targets = self._prepare_single_window_target(
-                    y[i],
-                    False
-                )
+                window_targets = self._prepare_single_window_target(y[i])
             else:
                 window_targets = target_func(x[i])
 
@@ -346,7 +278,7 @@ class FichEn:
             else:
                 print(f'\rПодготовка данных: |{bar}| {percent:.2f}%    Осталось {time_per*(lx-i):.2f} секунд', end='', flush=True)
 
-
+        print()
         x = np.array(XX)
         y = np.array(YY)
         print(f"Создано {x.shape[0]} примеров")
@@ -450,7 +382,7 @@ class FichEn:
 
     def forecast(self, latest_data, feature_func=None):
         if feature_func == None:
-            X = self._prepare_single_window_features(latest_data, len(latest_data), False, True)
+            X = self._prepare_single_window_features(latest_data)
         else:
             X = feature_func(latest_data)
 
