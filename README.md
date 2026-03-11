@@ -1,266 +1,242 @@
-# dquant
+<div align="center">
+  <h1>dquant</h1>
+  <p><strong>Автоматическое прогнозирование волатильности для трейдеров и аналитиков</strong></p>
+  <p>
+    <a href="https://pypi.org/project/dquant/">
+      <img src="https://img.shields.io/pypi/v/dquant.svg?color=blue" alt="PyPI version">
+    </a>
+    <a href="https://pypi.org/project/dquant/">
+      <img src="https://img.shields.io/pypi/pyversions/dquant.svg?color=blue" alt="Python versions">
+    </a>
+    <a href="https://github.com/artrdon/dquant/blob/main/LICENSE">
+      <img src="https://img.shields.io/github/license/artrdon/dquant.svg?color=blue" alt="License: MIT">
+    </a>
+    <a href="https://pepy.tech/project/dquant">
+      <img src="https://pepy.tech/badge/dquant" alt="Downloads">
+    </a>
+    <a href="https://github.com/artrdon/dquant/stargazers">
+      <img src="https://img.shields.io/github/stars/artrdon/dquant?style=social" alt="GitHub stars">
+    </a>
+  </p>
+  <p>
+    <a href="#-установка">Установка</a> •
+    <a href="#-быстрый-старт">Быстрый старт</a> •
+    <a href="#-документация">Документация</a> •
+    <a href="#-примеры">Примеры</a> •
+    <a href="#-вклад">Вклад</a>
+  </p>
+  <br>
+  <img src="https://via.placeholder.com/800x400/0A1929/FFFFFF?text=dquant+volatility+forecast" alt="dquant demo" width="600">
+  <br>
+  <p><i>Прогноз волатильности с помощью dquant</i></p>
+</div>
 
-[![PyPI
-version](https://img.shields.io/pypi/v/dquant)](https://pypi.org/project/dquant/)
-[![Python](https://img.shields.io/pypi/pyversions/dquant)](https://pypi.org/project/dquant/)
-[![License](https://img.shields.io/github/license/USERNAME/dquant)](LICENSE)
-[![Downloads](https://img.shields.io/pypi/dm/dquant)](https://pypi.org/project/dquant/)
-[![Issues](https://img.shields.io/github/issues/USERNAME/dquant)](https://github.com/USERNAME/dquant/issues)
+---
 
-**dquant** --- это Python‑библиотека для **автоматического
-прогнозирования волатильности финансовых временных рядов с помощью
-машинного обучения**.
+## О проекте
 
-Библиотека берёт на себя весь ML‑пайплайн --- от сырых рыночных данных
-до готового прогноза:
+**dquant** — это Python-библиотека с открытым исходным кодом для автоматического прогнозирования волатильности финансовых временных рядов. Она берёт на себя все этапы построения модели: от сырых цен до готового прогноза.
 
--   автоматический feature engineering\
--   построение целевой переменной\
--   корректное разделение временных рядов\
--   обучение модели\
--   визуализацию обучения\
--   прогнозирование
+### Ключевая идея
+> **Трейдеру не нужно знать машинное обучение, чтобы использовать ИИ для прогнозирования волатильности.**
 
-Цель проекта --- **сделать методы машинного обучения доступными
-трейдерам, количественным аналитикам и разработчикам торговых систем**.
+### Возможности
 
-------------------------------------------------------------------------
+| | |
+|---|---|
+| **Автоматический feature engineering** | Из сырых цен (open, high, low, close, volume) создаются десятки признаков |
+| **Целевая переменная без look-ahead bias** | Корректный расчёт реализованной волатильности |
+| **3 модели на выбор** | Градиентный бустинг, XGBoost, LightGBM с ранней остановкой |
+| **Визуализация обучения** | График ошибок на train/validation для контроля переобучения |
+| **Сохранение и загрузка** | Обучил один раз — используй всегда |
+| **Гибкая кастомизация** | Свои признаки, параметры модели, источники данных |
+| **Интеграция с любыми данными** | Yahoo Finance, MetaTrader 5 |
 
-# Почему dquant
+### Для кого это
 
-В большинстве проектов по финансовому ML приходится писать сотни строк
-инфраструктурного кода:
+- **Алгоритмические трейдеры** — для калибровки моделей и управления рисками
+- **Дискреционные трейдеры** — для оценки рыночного режима и размера позиции
+- **Количественные аналитики** — для быстрого прототипирования
+- **Разработчики** — для встраивания в торговые системы
+- **Студенты** — как готовый бенчмарк и учебный пример
 
--   создание лагов
--   построение признаков
--   расчёт волатильности
--   предотвращение look‑ahead bias
--   корректная валидация временных рядов
--   обучение моделей
+---
 
-dquant автоматизирует этот процесс.
+## Установка
 
-То, что обычно требует десятков файлов и сотен строк кода, можно сделать
-так:
+### Требования
+- Python 3.7 или выше
+- pip
 
-``` python
-import yfinance as yf
-from dquant import VolatilityGB
 
-df = yf.download("AAPL", start="2020-01-01")
-
-model = VolatilityGB()
-model.fit(df, horizon=21)
-
-prediction = model.predict(df.tail(50))
-print(prediction)
+```bash
+pip install dquant
 ```
 
-------------------------------------------------------------------------
 
-# Основные возможности
+### Проверка установки
 
-## Автоматический Feature Engineering
+```python
+import dquant
+print(dquant.__version__)  # Должно вывести версию
+```
 
-При вызове `.fit()` библиотека автоматически создаёт признаки:
+---
 
-**Лаги** - close lag 1, 2, 3, 5, 10, 20 - volume lag
+## Быстрый старт
 
-**Скользящие средние** - SMA - EMA
+### Минимальный рабочий пример с Bitcoin
 
-**Историческая волатильность** - rolling standard deviation - historical
-volatility
-
-**Отношения цен** - high / low - close / open - (close − open) / close
-
-**Индикаторы волатильности** - ATR - Parkinson volatility -
-Rogers‑Satchell volatility
-
-**Временные признаки** - день недели - месяц - час (для intraday данных)
-
-**Технические индикаторы** - RSI - MACD - Bollinger Bands width
-
-Все признаки создаются **без использования будущих данных**.
-
-------------------------------------------------------------------------
-
-## Автоматическое построение таргета
-
-Целевая переменная --- реализованная волатильность на будущем горизонте.
-
-По умолчанию:
-
-    std(log_returns over horizon)
-
-Таргет автоматически сдвигается вперёд, чтобы исключить утечку
-информации.
-
-------------------------------------------------------------------------
-
-## Модели
-
-По умолчанию используется:
-
-**XGBoost**
-
-Также поддерживается:
-
-**LightGBM**
-
-Поддерживаются:
-
--   early stopping
--   ограничение числа деревьев
--   валидация
--   визуализация обучения
-
-------------------------------------------------------------------------
-
-## Визуализация обучения
-
-После `.fit()` можно построить график:
-
--   ошибка train
--   ошибка validation
--   количество деревьев
-
-Это позволяет обнаружить:
-
--   переобучение
--   недообучение
--   оптимальное число деревьев
-
-------------------------------------------------------------------------
-
-## Сохранение моделей
-
-    model.save("model.vol")
-    model.load("model.vol")
-
-Сохраняются:
-
--   обученная модель
--   признаки
--   параметры
--   конфигурация
-
-------------------------------------------------------------------------
-
-# Установка
-
-    pip install dquant
-
-Основные зависимости:
-
--   pandas
--   numpy
--   scikit-learn
--   xgboost
--   lightgbm
--   matplotlib
-
-------------------------------------------------------------------------
-
-# Быстрый старт
-
-``` python
+```python
+import pandas as pd
 import yfinance as yf
-from dquant import VolatilityGB
+from dquant.models import VolClustXGB
 
-df = yf.download("AAPL", start="2020-01-01", end="2024-01-01")
+# 1. Загружаем данные (Yahoo Finance)
+df = yf.download("BTC-USD", start="2020-01-01", end="2024-01-01")
+df.columns = ['open', 'high', 'low', 'close', 'volume']  # Переименовываем колонки
 
-model = VolatilityGB()
+# 2. Создаём модель
+model = VolClustXGB({}, default=True, early_stopping=True)
 
+# 3. Обучаем
 model.fit(
-    df,
-    horizon=21,
-    max_trees=300
+    df, 
+    input_bars=70,      # используем 70 свечей для прогноза
+    horizon=20,         # прогнозируем на 20 дней вперёд
+    trees_count=200,    # максимум 200 деревьев
+    show_results=True   # показать график обучения
 )
 
-last_data = df.iloc[-50:]
+# 4. Прогнозируем
+last_bars = df.iloc[-70:].copy()
+prediction = model.forecast(last_bars)
 
-prediction = model.predict(last_data)
-
-print(f"Ожидаемая волатильность: {prediction:.2%}")
+print(f"\n📈 Прогноз волатильности на 20 дней: {prediction:.2%}")
+print(f"    (означает ожидаемое движение {prediction:.2%} от текущей цены)")
 ```
 
-------------------------------------------------------------------------
+### Результат выполнения
 
-# Кастомизация
+```
+Обучение модели: 100%|██████████| 200/200 [00:15<00:00]
+Лучшая модель на итерации 156
 
-Можно передать собственную функцию генерации признаков:
-
-``` python
-def my_features(df):
-    df = df.copy()
-    df["ratio"] = df["high"] / df["low"]
-    df["volume_ma"] = df["volume"].rolling(5).mean()
-    return df
-
-model.fit(df, horizon=10, feature_engineering=my_features)
+📈 Прогноз волатильности на 20 дней: 3.45%
+    (означает ожидаемое движение 3.45% от текущей цены)
 ```
 
-------------------------------------------------------------------------
+---
 
-# Архитектура проекта
+## Документация
 
-    dquant/
+| Ресурс | Описание |
+|:-------|:---------|
+| [**Полная документация**](https://dquant.space/docs) | Все классы, методы, параметры |
 
-    volatility_gb.py
-    features.py
-    target.py
-    validation.py
-    plotting.py
-    metrics.py
-    config.py
 
-------------------------------------------------------------------------
 
-# Требования к данным
+---
 
-Входные данные должны быть `pandas DataFrame`.
+## Примеры использования
 
-Поддерживаемые столбцы:
+### С Yahoo Finance
 
-    open
-    high
-    low
-    close
-    volume
+```python
+import yfinance as yf
+from dquant.models import VolClustXGB
 
-Минимально:
+# Любой тикер: BTC-USD, AAPL, EURUSD=X
+df = yf.download("AAPL", start="2015-01-01")
+df.columns = ['open', 'high', 'low', 'close', 'volume']
 
-    close
+model = VolClustXGB({}, default=True)
+model.fit(df, input_bars=70, horizon=20)
+pred = model.forecast(df.iloc[-70:])
+print(f"Прогноз для AAPL: {pred:.2%}")
+```
 
-Требования:
+### С MetaTrader 5
 
--   данные отсортированы по времени
--   индекс числовой или DatetimeIndex
+```python
+import MetaTrader5 as mt5
+import pandas as pd
+import datetime as dt
+from dquant.models import VolClustXGB
 
-------------------------------------------------------------------------
+# Подключение к MT5
+if not mt5.initialize():
+    print("Ошибка подключения к MT5")
+    quit()
 
-# Roadmap
+# Загрузка данных
+rates = mt5.copy_rates_range("GOLD", mt5.TIMEFRAME_D1, 
+                            dt.datetime.now() - dt.timedelta(days=1000),
+                            dt.datetime.now())
+mt5.shutdown()
 
-Планируемые функции:
+# Подготовка данных
+df = pd.DataFrame(rates)
+df['time'] = pd.to_datetime(df['time'], unit='s')
+df.set_index('time', inplace=True)
+df.rename(columns={'tick_volume': 'volume'}, inplace=True)
 
--   LSTM модели
--   Prophet
--   автоматический подбор гиперпараметров (Optuna)
--   прогноз волатильности портфеля
--   real‑time данные
--   интеграция с брокерскими API
--   web dashboard
+# Обучение и прогноз
+model = VolClustXGB({}, default=True)
+model.fit(df, input_bars=70, horizon=20)
+print(f"Прогноз для GOLD: {model.forecast(df.iloc[-70:])}")
+```
+---
 
-------------------------------------------------------------------------
+## Как внести вклад
 
-# Сообщество
+Мы приветствуем любой вклад в проект! Вот несколько способов помочь:
 
-Telegram чат:
+### Сообщить об ошибке
+Нашли баг? [Создайте Issue](https://github.com/artrdon/dquant/issues) с подробным описанием:
+- Что делали
+- Что ожидали
+- Что произошло на самом деле
+- Код для воспроизведения (если возможно)
 
-https://t.me/dquant_chat
+### Предложить идею
+Есть идея по улучшению? [Напишите в Telegram](https://t.me/Denchik_ai) или создайте Issue с меткой `enhancement`.
 
-------------------------------------------------------------------------
 
-# Лицензия
+---
 
-MIT License
+## Лицензия
+
+Проект распространяется под лицензией MIT. Подробнее в файле [LICENSE](LICENSE).
+
+---
+
+## Поддержка проекта
+
+Если **dquant** помог вам в работе или учёбе:
+
+- Поставьте звезду на GitHub ⭐ — это очень мотивирует!
+- Расскажите о библиотеке коллегам
+- [Напишите мне](https://t.me/Denchik_ai) о вашем опыте использования
+
+---
+
+## Контакты
+
+**Автор:** Денис Макаров
+
+- 📱 Telegram: [@Denchik_ai](https://t.me/Denchik_ai)
+- 📧 Email: *ваш email*
+- 💻 GitHub: [@artrdon](https://github.com/artrdon)
+- 🌐 Сайт проекта: [dquant.space](https://dquant.space)
+
+---
+
+<div align="center">
+  <sub>
+    Сделано с ❤️ для трейдеров и аналитиков
+    <br>
+    Если проект полезен — поставьте звезду!
+  </sub>
+</div>
+

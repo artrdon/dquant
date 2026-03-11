@@ -246,8 +246,8 @@ class FichEn:
         return corr_matrix, high_corr_pairs
 
 
-    def fit(self, data, input_bars, horizont, trees_count, show_results=False, feature_func=None, target_func=None):
-        x, y = self._DataSplitting(data, input_bars, horizont, True)
+    def fit(self, data, input_bars, horizon, trees_count, show_results=False, feature_func=None, target_func=None):
+        x, y = self._DataSplitting(data, input_bars, horizon, True)
         XX = []
         YY = []
         lx = len(x)
@@ -305,14 +305,14 @@ class FichEn:
                 t_error = 0
                 v_error = 0
                 # Определяем горизонты
-                if isinstance(horizont, int):
-                    horizont_list = list(range(horizont))
+                if isinstance(horizon, int):
+                    horizon_list = list(range(horizon))
                 else:
-                    horizont_list = horizont
+                    horizon_list = horizon
 
                 # Если y - 2D (уже с горизонтами)
                 if len(y_train.shape) == 2 and y_train.shape[1] > 1:
-                    for h_idx, h in enumerate(horizont_list):
+                    for h_idx, h in enumerate(horizon_list):
                         if h_idx >= y_train.shape[1]:
                             print(f"Предупреждение: горизонт {h} выходит за пределы y, пропускаем")
                             continue
@@ -349,8 +349,8 @@ class FichEn:
                             v_error += mean_squared_error(y_h_v_clean, model.predict(X_h_v))
 
 
-                var_test_error = float(t_error)/horizont
-                var_val_error = float(v_error)/horizont
+                var_test_error = float(t_error)/horizon
+                var_val_error = float(v_error)/horizon
 
                 if self.early_stopping:
                     if previous_error_was_grow:
