@@ -1,32 +1,8 @@
 <div align="center">
   <h1>dquant</h1>
   <p><strong>Автоматическое прогнозирование волатильности для трейдеров и аналитиков</strong></p>
-  <p>
-    <a href="https://pypi.org/project/dquant/">
-      <img src="https://img.shields.io/pypi/v/dquant.svg?color=blue" alt="PyPI version">
-    </a>
-    <a href="https://pypi.org/project/dquant/">
-      <img src="https://img.shields.io/pypi/pyversions/dquant.svg?color=blue" alt="Python versions">
-    </a>
-    <a href="https://github.com/artrdon/dquant/blob/main/LICENSE">
-      <img src="https://img.shields.io/github/license/artrdon/dquant.svg?color=blue" alt="License: MIT">
-    </a>
-    <a href="https://pepy.tech/project/dquant">
-      <img src="https://pepy.tech/badge/dquant" alt="Downloads">
-    </a>
-    <a href="https://github.com/artrdon/dquant/stargazers">
-      <img src="https://img.shields.io/github/stars/artrdon/dquant?style=social" alt="GitHub stars">
-    </a>
-  </p>
-  <p>
-    <a href="#-установка">Установка</a> •
-    <a href="#-быстрый-старт">Быстрый старт</a> •
-    <a href="#-документация">Документация</a> •
-    <a href="#-примеры">Примеры</a> •
-    <a href="#-вклад">Вклад</a>
-  </p>
   <br>
-  <img src="logo.png" alt="dquant demo" width="200">
+  <img src="https://github.com/artrdon/dquant/blob/main/logo.png?raw=true" alt="dquant demo" width="200">
   <br>
   <p><i>Прогноз волатильности с помощью dquant</i></p>
 </div>
@@ -123,7 +99,7 @@ rez = model.forecast(df.iloc[-70:].copy(), show=True)
  0.0009813 0.0007931 0.0012909 0.0013664 0.0016466 0.0014836 0.0011577
  0.0008737 0.0007213 0.0008084 0.0012699 0.0015358 0.0014748]
 ```
-<img src="readmeforecast.png">
+<img src="https://github.com/artrdon/dquant/blob/main/readmeforecast.png?raw=true">
 
 Красным показана волатильность за предыдущие свечи, а зеленым - будущая волатильность.
 
@@ -227,36 +203,9 @@ rez = model.forecast(df.iloc[-70:].copy(), show=True)
 ```
 ---
 
-## Как внести вклад
-
-Мы приветствуем любой вклад в проект! Вот несколько способов помочь:
-
-### Сообщить об ошибке
-Нашли баг? [Создайте Issue](https://github.com/artrdon/dquant/issues) с подробным описанием:
-- Что делали
-- Что ожидали
-- Что произошло на самом деле
-- Код для воспроизведения (если возможно)
-
-### Предложить идею
-Есть идея по улучшению? [Напишите в Telegram](https://t.me/Denchik_ai) или создайте Issue с меткой `enhancement`.
-
-
----
-
 ## Лицензия
 
 Проект распространяется под лицензией MIT. Подробнее в файле [LICENSE](https://github.com/artrdon/dquant/blob/main/LICENSE).
-
----
-
-## Поддержка проекта
-
-Если **dquant** помог вам в работе или учёбе:
-
-- Поставьте звезду на GitHub ⭐ — это очень мотивирует!
-- Расскажите о библиотеке коллегам
-- [Напишите мне](https://t.me/Denchik_ai) о вашем опыте использования
 
 ---
 
@@ -269,12 +218,4 @@ rez = model.forecast(df.iloc[-70:].copy(), show=True)
 - Сайт проекта: [dquant.space](https://dquant.space)
 
 ---
-
-<div align="center">
-  <sub>
-    Сделано с ❤️ для трейдеров и аналитиков
-    <br>
-    Если проект полезен — поставьте звезду!
-  </sub>
-</div>
 
