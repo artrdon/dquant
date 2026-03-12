@@ -308,15 +308,20 @@ class Visualization:
         fig.savefig(filename, **save_kwargs)
         print(f"💾 График сохранен как {filename}")
 
-    def show_vol(self, df, save_path=None):
+    def show_vol(self, df, pred, save_path=None):
         fig, ax = self._create_figure(figsize=(15, 6))
 
         bottom_y = 0
         max_bar_height = 0
 
         for i, (idx, row) in enumerate(df.iterrows()):
+            if i < len(df)-pred:
+                color = self.config['colors']['primary']
+            else:
+                color = 'green'
+
             x_pos = i
-            color = self.config['colors']['primary']
+
 
             ax.plot([x_pos, x_pos], [bottom_y, bottom_y],
                     color=self.config['colors']['text'], linewidth=1)

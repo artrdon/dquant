@@ -380,7 +380,7 @@ class FichEn:
         print('model is trained')
         self.is_fitted = True
 
-    def forecast(self, latest_data, feature_func=None):
+    def forecast(self, latest_data, feature_func=None, show=False):
         if feature_func == None:
             X = self._prepare_single_window_features(latest_data)
         else:
@@ -408,6 +408,22 @@ class FichEn:
                 pred = session.run(None, {input_name: X_float32})
                 predictions.append(float(f'{pred[0][0][0]:.7f}'))
 
+
+            epsilon = 1e-10
+            close_price = latest_data['close'].values
+            latest_data['high_low'] = (latest_data['high'] - latest_data['low']) / (close_price + epsilon)
+            prev_close = latest_data['close'].shift(1).fillna(latest_data['close'])
+            latest_data['TR'] = np.maximum(
+                latest_data['high_low'],
+                np.maximum(
+                    abs(latest_data['high'] - prev_close) / (close_price + epsilon),
+                    abs(latest_data['low'] - prev_close) / (close_price + epsilon)
+                )
+            )
+            rez = np.concatenate([np.array(latest_data['TR'].values), np.array(predictions)])
+            dates = pd.date_range(start='2024-01-01', periods=len(rez), freq='D')
+            rez = pd.DataFrame(rez, index=dates, columns=['value'])
+            self.V.show_vol(rez, len(predictions))
             return np.array(predictions)
         else:
             # Масштабируем X
@@ -426,6 +442,21 @@ class FichEn:
                 else:
                     predictions.append(pred[0] if len(pred.shape) > 0 else pred)
 
+            epsilon = 1e-10
+            close_price = latest_data['close'].values
+            latest_data['high_low'] = (latest_data['high'] - latest_data['low']) / (close_price + epsilon)
+            prev_close = latest_data['close'].shift(1).fillna(latest_data['close'])
+            latest_data['TR'] = np.maximum(
+                latest_data['high_low'],
+                np.maximum(
+                    abs(latest_data['high'] - prev_close) / (close_price + epsilon),
+                    abs(latest_data['low'] - prev_close) / (close_price + epsilon)
+                )
+            )
+            rez = np.concatenate([np.array(latest_data['TR'].values), np.array(predictions)])
+            dates = pd.date_range(start='2024-01-01', periods=len(rez), freq='D')
+            rez = pd.DataFrame(rez, index=dates, columns=['value'])
+            self.V.show_vol(rez, len(predictions))
             return np.array(predictions)
 
 
