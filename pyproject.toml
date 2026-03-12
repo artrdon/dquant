@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dquant"
-version = "0.1.1"
+version = "1.0.0"
 authors = [
   { name="Denis Makarov" },
 ]
 description = "dquant — это Python-библиотека с открытым исходным кодом для автоматического прогнозирования волатильности финансовых временных рядов. Она берёт на себя все этапы построения модели: от сырых цен до готового прогноза."
-readme = "README.md"
+readme = "pyplreadme.md"
 requires-python = ">=3.7"
 classifiers = [
     "Programming Language :: Python :: 3",
