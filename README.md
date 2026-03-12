@@ -90,41 +90,45 @@ print(dquant.__version__)  # Должно вывести версию
 ```python
 import pandas as pd
 import yfinance as yf
-from dquant.models import VolClustXGB
+from dquant.models import VolClustXGB 
+from dquant.visual import Visualization
 
-# 1. Загружаем данные (Yahoo Finance)
-df = yf.download("BTC-USD", start="2020-01-01", end="2024-01-01")
-df.columns = ['open', 'high', 'low', 'close', 'volume']  # Переименовываем колонки
 
-# 2. Создаём модель
+# 1. Загружаем данные
+df = yf.download("BTC-USD", start="2020-01-01", interval='1d')
+df = pd.DataFrame({
+    'open': df[('Open', 'BTC-USD')].values,
+    'high': df[('High', 'BTC-USD')].values,
+    'low': df[('Low', 'BTC-USD')].values,
+    'close': df[('Close', 'BTC-USD')].values,
+    'volume': df[('Volume', 'BTC-USD')].values
+}, index=df.index)
+
+# 2. Создаем модель
 model = VolClustXGB({}, default=True, early_stopping=True)
 
-# 3. Обучаем
-model.fit(
-    df, 
-    input_bars=70,      # используем 70 свечей для прогноза
-    horizon=20,         # прогнозируем на 20 дней вперёд
-    trees_count=200,    # максимум 200 деревьев
-    show_results=True   # показать график обучения
-)
+# 3. Создаем визуализацию
+v = Visualization(theme='dark')
 
-# 4. Прогнозируем
-last_bars = df.iloc[-70:].copy()
-prediction = model.forecast(last_bars)
+# 4. Обучаем модель
+model.fit(df, input_bars=70, horizon=20, trees_count=200, show_results=True)
 
-print(f"\n📈 Прогноз волатильности на 20 дней: {prediction:.2%}")
-print(f"    (означает ожидаемое движение {prediction:.2%} от текущей цены)")
+
+# 5. Делаем прогноз
+rez = model.forecast(df.iloc[-70:].copy(), show=True)
+
 ```
 
 ### Результат выполнения
 
 ```
-Обучение модели: 100%|██████████| 200/200 [00:15<00:00]
-Лучшая модель на итерации 156
-
-📈 Прогноз волатильности на 20 дней: 3.45%
-    (означает ожидаемое движение 3.45% от текущей цены)
+[0.0016554 0.0018979 0.0015921 0.0014239 0.0013767 0.0011586 0.0013139
+ 0.0009813 0.0007931 0.0012909 0.0013664 0.0016466 0.0014836 0.0011577
+ 0.0008737 0.0007213 0.0008084 0.0012699 0.0015358 0.0014748]
 ```
+<img src="readmeforecast.png">
+
+Красным показана волатильность за предыдущие свечи, а зеленым - будущая волатильность.
 
 ---
 
@@ -143,48 +147,93 @@ print(f"    (означает ожидаемое движение {prediction:.2
 ### С Yahoo Finance
 
 ```python
+import pandas as pd
 import yfinance as yf
-from dquant.models import VolClustXGB
+from dquant.models import VolClustXGB 
+from dquant.visual import Visualization
 
-# Любой тикер: BTC-USD, AAPL, EURUSD=X
-df = yf.download("AAPL", start="2015-01-01")
-df.columns = ['open', 'high', 'low', 'close', 'volume']
 
-model = VolClustXGB({}, default=True)
-model.fit(df, input_bars=70, horizon=20)
-pred = model.forecast(df.iloc[-70:])
-print(f"Прогноз для AAPL: {pred:.2%}")
+# 1. Загружаем данные
+df = yf.download("BTC-USD", start="2020-01-01", interval='1d')
+df = pd.DataFrame({
+    'open': df[('Open', 'BTC-USD')].values,
+    'high': df[('High', 'BTC-USD')].values,
+    'low': df[('Low', 'BTC-USD')].values,
+    'close': df[('Close', 'BTC-USD')].values,
+    'volume': df[('Volume', 'BTC-USD')].values
+}, index=df.index)
+
+# 2. Создаем модель
+model = VolClustXGB({}, default=True, early_stopping=True)
+
+# 3. Создаем визуализацию
+v = Visualization(theme='dark')
+
+# 4. Обучаем модель
+model.fit(df, input_bars=70, horizon=20, trees_count=200, show_results=True)
+
+
+# 5. Делаем прогноз
+rez = model.forecast(df.iloc[-70:].copy(), show=True)
 ```
 
 ### С MetaTrader 5
 
 ```python
-import MetaTrader5 as mt5
 import pandas as pd
-import datetime as dt
-from dquant.models import VolClustXGB
+import MetaTrader5 as mt5
+from dquant.models import VolClustXGB 
+from dquant.visual import Visualization
 
-# Подключение к MT5
+
+symbol = "EURUSD"          # какой символ смотреть
+timeframe = mt5.TIMEFRAME_H1   # M1, M5, M15, H1, D1 и т.д.
+days_back = 1000             # сколько дней истории загрузить
+
+# Подключаемся к MT5
 if not mt5.initialize():
-    print("Ошибка подключения к MT5")
+    print("Не удалось подключиться к MetaTrader5")
     quit()
 
-# Загрузка данных
-rates = mt5.copy_rates_range("GOLD", mt5.TIMEFRAME_D1, 
-                            dt.datetime.now() - dt.timedelta(days=1000),
-                            dt.datetime.now())
-mt5.shutdown()
+# Проверяем, что символ доступен
+if not mt5.symbol_select(symbol, True):
+    print(f"Символ {symbol} не найден или не включён")
+    mt5.shutdown()
+    quit()
 
-# Подготовка данных
+# Вычисляем даты
+to_date = dt.datetime.now() + dt.timedelta(hours=3)
+from_date = to_date - dt.timedelta(days=days_back)
+
+# Загружаем бары
+rates = mt5.copy_rates_range(symbol, timeframe, from_date, to_date)
+
+mt5.shutdown()  # больше не нужен терминал
+
+if rates is None or len(rates) == 0:
+    print("Нет данных!")
+    quit()
+
+# Превращаем в DataFrame
 df = pd.DataFrame(rates)
 df['time'] = pd.to_datetime(df['time'], unit='s')
 df.set_index('time', inplace=True)
-df.rename(columns={'tick_volume': 'volume'}, inplace=True)
 
-# Обучение и прогноз
-model = VolClustXGB({}, default=True)
-model.fit(df, input_bars=70, horizon=20)
-print(f"Прогноз для GOLD: {model.forecast(df.iloc[-70:])}")
+df.rename(columns={
+    'tick_volume': 'volume'
+}, inplace=True)
+
+# Создаем модель
+model = VolClustXGB({}, default=True, early_stopping=True)
+
+# Создаем визуализацию
+v = Visualization(theme='dark')
+
+# Обучаем модель
+model.fit(df, input_bars=70, horizon=20, trees_count=200, show_results=True)
+
+# Делаем прогноз
+rez = model.forecast(df.iloc[-70:].copy(), show=True)
 ```
 ---
 
@@ -225,10 +274,9 @@ print(f"Прогноз для GOLD: {model.forecast(df.iloc[-70:])}")
 
 **Автор:** Денис Макаров
 
-- 📱 Telegram: [@Denchik_ai](https://t.me/Denchik_ai)
-- 📧 Email: *ваш email*
-- 💻 GitHub: [@artrdon](https://github.com/artrdon)
-- 🌐 Сайт проекта: [dquant.space](https://dquant.space)
+- Telegram: [@Denchik_ai](https://t.me/Denchik_ai)
+- GitHub: [@artrdon](https://github.com/artrdon)
+- Сайт проекта: [dquant.space](https://dquant.space)
 
 ---
 
