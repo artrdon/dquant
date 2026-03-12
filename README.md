@@ -26,7 +26,7 @@
     <a href="#-вклад">Вклад</a>
   </p>
   <br>
-  <img src="https://via.placeholder.com/800x400/0A1929/FFFFFF?text=dquant+volatility+forecast" alt="dquant demo" width="600">
+  <img src="logo.png" alt="dquant demo" width="200">
   <br>
   <p><i>Прогноз волатильности с помощью dquant</i></p>
 </div>
@@ -107,14 +107,11 @@ df = pd.DataFrame({
 # 2. Создаем модель
 model = VolClustXGB({}, default=True, early_stopping=True)
 
-# 3. Создаем визуализацию
-v = Visualization(theme='dark')
-
-# 4. Обучаем модель
+# 3. Обучаем модель
 model.fit(df, input_bars=70, horizon=20, trees_count=200, show_results=True)
 
 
-# 5. Делаем прогноз
+# 4. Делаем прогноз
 rez = model.forecast(df.iloc[-70:].copy(), show=True)
 
 ```
@@ -166,14 +163,10 @@ df = pd.DataFrame({
 # 2. Создаем модель
 model = VolClustXGB({}, default=True, early_stopping=True)
 
-# 3. Создаем визуализацию
-v = Visualization(theme='dark')
-
-# 4. Обучаем модель
+# 3. Обучаем модель
 model.fit(df, input_bars=70, horizon=20, trees_count=200, show_results=True)
 
-
-# 5. Делаем прогноз
+# 4. Делаем прогноз
 rez = model.forecast(df.iloc[-70:].copy(), show=True)
 ```
 
@@ -225,9 +218,6 @@ df.rename(columns={
 
 # Создаем модель
 model = VolClustXGB({}, default=True, early_stopping=True)
-
-# Создаем визуализацию
-v = Visualization(theme='dark')
 
 # Обучаем модель
 model.fit(df, input_bars=70, horizon=20, trees_count=200, show_results=True)

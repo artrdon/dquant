@@ -431,7 +431,7 @@ class VolClustXGB(FichEn):
         if default:
             self.base_model = xgboost.XGBRegressor(
                 objective='reg:squarederror',
-                learning_rate=0.01,
+                learning_rate=0.1,
                 n_estimators=1,
                 max_depth=3,
                 min_child_weight=5,

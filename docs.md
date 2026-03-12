@@ -18,12 +18,10 @@
 2. [Установка](#2-установка)
    - 2.1 [Требования](#21-требования)
    - 2.2 [Установка через pip](#22-установка-через-pip)
-   - 2.3 [Установка из исходников](#23-установка-из-исходников)
-   - 2.4 [Проверка установки](#24-проверка-установки)
+   - 2.3 [Проверка установки](#23-проверка-установки)
 3. [Быстрый старт](#3-быстрый-старт)
    - 3.1 [Минимальный пример](#31-минимальный-пример)
    - 3.2 [Пошаговый разбор](#32-пошаговый-разбор)
-   - 3.3 [Ожидаемый результат](#33-ожидаемый-результат)
 4. [Основные концепции](#4-основные-концепции)
    - 4.1 [Входные данные](#41-входные-данные)
    - 4.2 [Целевая переменная (таргет)](#42-целевая-переменная-таргет)
@@ -166,20 +164,12 @@ df = pd.DataFrame({
 # 2. Создаем модель
 model = VolClustXGB({}, default=True, early_stopping=True)
 
-# 3. Создаем визуализацию
-v = Visualization(theme='dark')
-
-# 4. Обучаем модель
+# 3. Обучаем модель
 model.fit(df, input_bars=70, horizon=20, trees_count=200, show_results=True)
 
 
-# 5. Делаем прогноз
-rez = model.forecast(df.iloc[-70:].copy())
-dates = pd.date_range(start='2024-01-01', periods=len(rez), freq='D')
-rez = pd.DataFrame(rez, index=dates, columns=['value'])
-
-# 6. Визуализируем прогноз
-v.show_vol(rez)
+# 4. Делаем прогноз
+rez = model.forecast(df.iloc[-70:].copy(), show=True)
 ```
 
 ### 3.2 Пошаговый разбор
@@ -220,20 +210,14 @@ model.fit(df, input_bars=70, horizon=20, trees_count=200, show_results=True)
 
 **Шаг 4: Прогноз**
 ```python
-rez = model.forecast(df.iloc[-70:].copy())
+rez = model.forecast(df.iloc[-70:].copy(), show=True)
 ```
 Передаём последние 70 свечей, получаем прогноз волатильности на следующие 20 дней.
 
-### 3.3 Ожидаемый результат
-
-```python
-dates = pd.date_range(start='2024-01-01', periods=len(rez), freq='D')
-rez = pd.DataFrame(rez, index=dates, columns=['value'])
-
-# 6. Визуализируем прогноз
-v.show_vol(rez)
-```
 Прогноз волатильности выйдет в виде графика.
+<img src="readmeforecast.png">
+Красным показана волатильность за предыдущие свечи, а зеленым - будущая волатильность.
+
 
 ---
 
@@ -338,11 +322,11 @@ model.load("btc_vol_model")
 
 #### 5.1.1 Параметры инициализации
 
-| Параметр | Тип | По умолчанию | Описание |
-|:---|:---|:---|:---|
-| `settings` | dict | `'Гиперпараметры модели по умолчанию'` |Гиперпараметры модели|
-| `default ` | bool | `True` | Использовать гиперпараметры модели по умолчанию|
-| `early_stopping` | bool | `True` | Включить раннюю остановку |
+| Параметр | Тип | По умолчанию                         | Описание |
+|:---|:---|:-------------------------------------|:---|
+| `settings` | dict | `Гиперпараметры модели по умолчанию` |Гиперпараметры модели|
+| `default ` | bool | `True`                               | Использовать гиперпараметры модели по умолчанию|
+| `early_stopping` | bool | `True`                               | Включить раннюю остановку |
 
 **Пример:**
 ```python
@@ -353,11 +337,11 @@ model = VolClustGB({}, default=True, early_stopping=True)
 
 ```python
 model.fit(
-df, 
-input_bars=70, 
-horizon=20, 
-trees_count=200, 
-show_results=True
+    df, 
+    input_bars=70, 
+    horizon=20, 
+    trees_count=200, 
+    show_results=True
 )
 ```
 
@@ -500,14 +484,11 @@ model.fit(df, input_bars=70, horizon=20, trees_count=200, show_results=True)
 
 ### 5.3 Интерпретация результатов
 ```
-rez = model.forecast(df.iloc[-70:].copy())
-dates = pd.date_range(start='2024-01-01', periods=len(rez), freq='D')
-rez = pd.DataFrame(rez, index=dates, columns=['value'])
-
-# 6. Визуализируем прогноз
-v.show_vol(rez)
+rez = model.forecast(df.iloc[-70:].copy(), show=True)
 ```
 Показывает на графике результат прогноза
+
+<img src="readmeforecast.png">
 
 ---
 
@@ -521,7 +502,6 @@ v.show_vol(rez)
 
 ```python
 def my_features(df):
-    """Создаёт кастомные признаки из DataFrame."""
     df = df.copy()
     
     # Мои уникальные признаки
@@ -529,16 +509,15 @@ def my_features(df):
     df['my_momentum'] = df['close'].pct_change(5)
     df['my_volume_ratio'] = df['volume'] / df['volume'].rolling(20).mean()
     
-    # Удаляем строки с NaN
     return df.dropna()
 
 model.fit(
-df, 
-input_bars=70, 
-horizon=20, 
-trees_count=200, 
-show_results=True,
-feature_func= my_features
+    df, 
+    input_bars=70, 
+    horizon=20, 
+    trees_count=200, 
+    show_results=True,
+    feature_func= my_features
 )
 ```
 
@@ -557,7 +536,6 @@ feature_func= my_features
 | `VolClustGB` | Класс для прогнозирования волатильности с помощью Gradient Boosting |
 | `VolClustXGB` | Класс для прогнозирования волатильности с помощью  XGBoost |
 | `VolClustLightGB` | Класс для прогнозирования волатильности с помощью LightGBM |
-| `Visualization` | Класс для визуализации |
 
 ---
 
@@ -585,19 +563,11 @@ df = pd.DataFrame({
 # 2. Создаем модель
 model = VolClustXGB({}, default=True, early_stopping=True)
 
-# 3. Создаем визуализацию
-v = Visualization(theme='dark')
-
-# 4. Обучаем модель
+# 3. Обучаем модель
 model.fit(df, input_bars=70, horizon=20, trees_count=200, show_results=True)
 
-# 5. Делаем прогноз
-rez = model.forecast(df.iloc[-70:].copy())
-dates = pd.date_range(start='2024-01-01', periods=len(rez), freq='D')
-rez = pd.DataFrame(rez, index=dates, columns=['value'])
-
-# 6. Визуализируем прогноз
-v.show_vol(rez)
+# 4. Делаем прогноз
+rez = model.forecast(df.iloc[-70:].copy(), show=True)
 ```
 ---
 
@@ -703,7 +673,7 @@ SOFTWARE.
 
 ## 13. История изменений
 
-### Версия 1.0.0 (14-03-2026)
+### Версия 1.0.0 (12-03-2026)
 - Первый публичный релиз
 - Базовая функциональность: класс VolClustGB, автоматический фичеинжиниринг, обучение XGBoost/LightGBM
 - Визуализация процесса обучения

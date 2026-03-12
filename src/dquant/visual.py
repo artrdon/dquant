@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-import numpy as np
 from cycler import cycler
 import os
 
@@ -120,46 +119,47 @@ dark_theme = {
 }
 
 
-def create_config(theme='light', logo_path=None):
-    if theme == 'dark':
-        theme_config = dark_theme
-    else:
-        theme_config = light_theme
-
-    config = base_config.copy()
-    config['theme'] = theme_config['name']
-
-    config['figure']['facecolor'] = theme_config['figure']['facecolor']
-
-    config['colors'] = theme_config['colors'].copy()
-    config['colors']['line_cycle'] = base_config['line_cycle']
-
-    config['grid'] = theme_config['grid'].copy()
-
-    config['axes']['spines_color'] = theme_config['colors']['spines']
-
-    config['brand'] = {
-        'name': 'Dvol',
-        'fontsize': 16,
-        'fontweight': 'bold',
-        'color': theme_config['colors']['brand'],
-        'position': (0.02, 0.96),
-        'use_logo': logo_path is not None and os.path.exists(logo_path),
-        'logo_path': logo_path,
-        'logo_size': 0.08
-    }
-
-    return config
-
-
 class Visualization:
 
     def __init__(self, theme='light'):
-        self.config = create_config(theme)
+        self.config = self.__create_config(theme)
         self.theme = theme
-        self._apply_config()
+        self.__apply_config()
 
-    def _apply_config(self):
+
+    def __create_config(self, theme='light', logo_path=None):
+        if theme == 'dark':
+            theme_config = dark_theme
+        else:
+            theme_config = light_theme
+
+        config = base_config.copy()
+        config['theme'] = theme_config['name']
+
+        config['figure']['facecolor'] = theme_config['figure']['facecolor']
+
+        config['colors'] = theme_config['colors'].copy()
+        config['colors']['line_cycle'] = base_config['line_cycle']
+
+        config['grid'] = theme_config['grid'].copy()
+
+        config['axes']['spines_color'] = theme_config['colors']['spines']
+
+        config['brand'] = {
+            'name': 'Dvol',
+            'fontsize': 16,
+            'fontweight': 'bold',
+            'color': theme_config['colors']['brand'],
+            'position': (0.02, 0.96),
+            'use_logo': logo_path is not None and os.path.exists(logo_path),
+            'logo_path': logo_path,
+            'logo_size': 0.08
+        }
+
+        return config
+
+
+    def __apply_config(self):
         config = self.config
 
         plt.rcParams['font.family'] = config['font']['family']
@@ -215,12 +215,13 @@ class Visualization:
 
         plt.rcParams['toolbar'] = 'toolbar2'
 
-    def set_theme(self, theme):
-        self.config = create_config(theme)
-        self.theme = theme
-        self._apply_config()
 
-    def _create_figure(self, *args, **kwargs):
+    def __set_theme(self, theme):
+        self.config = self.__create_config(theme)
+        self.theme = theme
+        self.__apply_config()
+
+    def __create_figure(self, *args, **kwargs):
         fig, ax = plt.subplots(*args, **kwargs)
 
         try:
@@ -233,7 +234,7 @@ class Visualization:
 
         return fig, ax
 
-    def _style_axes(self, ax):
+    def __style_axes(self, ax):
         for spine in ax.spines.values():
             spine.set_color(self.config['colors']['spines'])
             spine.set_linewidth(self.config['axes']['spines_linewidth'])
@@ -247,7 +248,7 @@ class Visualization:
         ax.yaxis.label.set_color(self.config['colors']['text'])
         ax.title.set_color(self.config['colors']['text'])
 
-    def _style_legend(self, ax):
+    def __style_legend(self, ax):
         legend = ax.legend()
         if legend:
             legend.get_frame().set_facecolor(self.config['colors']['legend_bg'])
@@ -255,7 +256,7 @@ class Visualization:
             for text in legend.get_texts():
                 text.set_color(self.config['colors']['text'])
 
-    def save_figure(self, fig, filename):
+    def __save_figure(self, fig, filename):
         config = self.config['save']
 
         save_kwargs = {
@@ -271,7 +272,7 @@ class Visualization:
         print(f"График сохранен как {filename}")
 
     def show_vol(self, df, pred, save_path=None):
-        fig, ax = self._create_figure(figsize=(15, 6))
+        fig, ax = self.__create_figure(figsize=(15, 6))
 
         bottom_y = 0
         max_bar_height = 0
@@ -302,19 +303,19 @@ class Visualization:
         ax.set_ylabel('')
         ax.set_title('Объемный график')
 
-        self._style_axes(ax)
+        self.__style_axes(ax)
 
         plt.xticks(range(len(df)), [d.strftime('%m-%d') for d in df.index], rotation=45)
 
         plt.tight_layout()
 
         if save_path:
-            self.save_figure(fig, save_path)
+            self.__save_figure(fig, save_path)
 
         plt.show()
 
     def show_errors(self, train_errors, val_errors, save_path=None):
-        fig, ax = self._create_figure(figsize=(10, 6))
+        fig, ax = self.__create_figure(figsize=(10, 6))
 
         ax.plot(list(train_errors), label='Train Loss',
                 color=self.config['colors']['primary'])
@@ -325,39 +326,13 @@ class Visualization:
         ax.set_title('Training and Test Loss over Trees')
         ax.grid(True)
 
-        self._style_axes(ax)
-        self._style_legend(ax)
+        self.__style_axes(ax)
+        self.__style_legend(ax)
 
         plt.tight_layout()
 
         if save_path:
-            self.save_figure(fig, save_path)
+            self.__save_figure(fig, save_path)
 
         plt.show()
 
-    def test(self, save_path=None):
-        x = np.linspace(0, 10, 100)
-        y1 = np.sin(x)
-        y2 = np.cos(x)
-        y3 = np.sin(x) * np.cos(x)
-
-        fig, ax = self._create_figure(figsize=(12, 6))
-
-        ax.plot(x, y1, label='sin(x)', color=self.config['colors']['primary'])
-        ax.plot(x, y2, label='cos(x)', color=self.config['colors']['secondary'])
-        ax.plot(x, y3, label='sin(x)cos(x)', color=self.config['colors']['tertiary'])
-
-        ax.set_title('Тригонометрические функции')
-        ax.set_xlabel('x')
-        ax.set_ylabel('y')
-        ax.grid(True)
-
-        self._style_axes(ax)
-        self._style_legend(ax)
-
-        plt.tight_layout()
-
-        if save_path:
-            self.save_figure(fig, save_path)
-
-        plt.show()
