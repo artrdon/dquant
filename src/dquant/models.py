@@ -1,3 +1,4 @@
+import json
 import matplotlib.pyplot as plt
 import joblib
 import re
@@ -419,6 +420,8 @@ class VolClustGB(FichEn):
         self.onnx_load = True
 
 
+
+
 class VolClustXGB(FichEn):
     def __init__(self, sett, default=True, early_stopping=True):
         self.models = []
@@ -496,6 +499,218 @@ class VolClustXGB(FichEn):
             self.loaded_models.append(session)
 
         self.onnx_load = True
+
+        scaler_path = os.path.join(name, f"{name}_scaler.json")
+        scaler_data = {
+            "mean": self.scaler.mean_.tolist() if self.scaler.mean_ is not None else [],
+            "std": self.scaler.scale_.tolist() if self.scaler.scale_ is not None else [],
+            # scale_ = стандартное отклонение
+            "var": self.scaler.var_.tolist() if self.scaler.var_ is not None else []
+        }
+
+        # Добавляем имена признаков, если они есть
+        if hasattr(self, 'feature_names') and self.feature_names:
+            scaler_data["feature_names"] = self.feature_names
+
+        with open(scaler_path, 'w') as f:
+            json.dump(scaler_data, f, indent=2)
+
+        print(f"Коэффициенты нормализации сохранены в {scaler_path}")
+
+    def save_to_mql5(self, name):
+        # 1. Создаём основную директорию
+        os.makedirs(name, exist_ok=True)
+        print(f"✅ Директория '{name}' создана или уже существует")
+
+        # 2. Создаём папку для ONNX файлов
+        onnx_dir = os.path.join(name, f"{name}_onnx")
+        os.makedirs(onnx_dir, exist_ok=True)
+
+        # 3. Создаём основной файл исходного кода MQL5 (.mq5)
+        mq5_file_path = os.path.join(name, f"{name}.mq5")  # Изменено с .mql5 на .mq5
+        with open(mq5_file_path, "w", encoding="utf-8") as f:
+            f.write("//+------------------------------------------------------------------+\n")
+            f.write("//|                                                  volind.mq5 |\n")
+            f.write("//|                                  Copyright 2025, MetaQuotes Ltd. |\n")
+            f.write("//|                                             https://www.mql5.com |\n")
+            f.write("//+------------------------------------------------------------------+\n")
+            f.write("#property indicator_chart_window\n")
+            f.write("#property indicator_buffers 2\n")
+            f.write("#property indicator_plots   2\n")
+            f.write("#property indicator_color1  clrGreen\n")
+            f.write("#property indicator_width1  3\n")
+            f.write("#property indicator_type1   DRAW_HISTOGRAM\n")
+            f.write("#property indicator_color2  clrRed\n")
+            f.write("#property indicator_width2  3\n")
+            f.write("#property indicator_type2   DRAW_HISTOGRAM\n\n")
+
+            f.write("//--- input parameters\n")
+            f.write(f"input int bars_to = {len(self.models)};\n\n")
+
+            f.write("//--- indicator buffers\n")
+            f.write("double past_vol[];\n")
+            f.write("double future_vol[];\n\n")
+
+            # Resource declarations
+            for i in range(len(self.models)):
+                f.write(f'#resource "\\\\{name}_onnx\\\\{name}_{i}.onnx" as uchar ExtModelData{i}[]\n')
+            f.write("\n")
+
+            # Model handles
+            for i in range(len(self.models)):
+                f.write(f'long model_handle{i} = INVALID_HANDLE;\n')
+            f.write("\n")
+
+            # OnInit function
+            f.write('//+------------------------------------------------------------------+\n')
+            f.write('//| Custom indicator initialization function                         |\n')
+            f.write('//+------------------------------------------------------------------+\n')
+            f.write('int OnInit()\n')
+            f.write('{\n')
+            f.write('   SetIndexBuffer(0, past_vol, INDICATOR_DATA);\n')
+            f.write('   SetIndexBuffer(1, future_vol, INDICATOR_DATA);\n')
+            f.write('   ArraySetAsSeries(past_vol, true);\n')
+            f.write('   ArraySetAsSeries(future_vol, true);\n\n')
+
+            for i in range(len(self.models)):
+                f.write(f'   model_handle{i} = OnnxCreateFromBuffer(ExtModelData{i}, ONNX_DEFAULT);\n')
+                f.write(f'   if (model_handle{i} == INVALID_HANDLE)\n')
+                f.write('   {\n')
+                f.write(f'      Print("Ошибка загрузки ONNX-модели {i}: ", GetLastError());\n')
+                f.write('      return INIT_FAILED;\n')
+                f.write('   }\n')
+                f.write(f'   Print("ONNX-модель {i} успешно загружена");\n\n')
+
+            f.write('   return(INIT_SUCCEEDED);\n')
+            f.write('}\n\n')
+
+            # OnCalculate function
+            f.write('//+------------------------------------------------------------------+\n')
+            f.write('//| Custom indicator iteration function                              |\n')
+            f.write('//+------------------------------------------------------------------+\n')
+            f.write('int OnCalculate(const int rates_total,\n')
+            f.write('                const int prev_calculated,\n')
+            f.write('                const datetime &time[],\n')
+            f.write('                const double &open[],\n')
+            f.write('                const double &high[],\n')
+            f.write('                const double &low[],\n')
+            f.write('                const double &close[],\n')
+            f.write('                const long &tick_volume[],\n')
+            f.write('                const long &volume[],\n')
+            f.write('                const int &spread[])\n')
+            f.write('{\n')
+            f.write('   ArraySetAsSeries(high, true);\n')
+            f.write('   ArraySetAsSeries(low, true);\n')
+            f.write('   ArraySetAsSeries(close, true);\n')
+            f.write('   ArraySetAsSeries(open, true);\n\n')
+
+            f.write('   int counted_bars = prev_calculated;\n')
+            f.write('   int limit;\n\n')
+
+            f.write('   if(counted_bars < 0) return(-1);\n')
+            f.write('   if(counted_bars > 0) counted_bars--;\n\n')
+
+            f.write('   limit = MathMin(rates_total - 1, rates_total - counted_bars);\n\n')
+
+            f.write('   for(int i=limit; i >= 0; i--)\n')
+            f.write('   {\n')
+            f.write('      if (i >= bars_to && i < rates_total)\n')
+            f.write('      {\n')
+            f.write('         int j = i - bars_to;\n')
+            f.write('         future_vol[i] = 0;\n')
+            f.write('         \n')
+            f.write('         if (i == limit)\n')
+            f.write('         {\n')
+            f.write('            past_vol[i] = MathAbs(high[j] - low[j]) / close[j];\n')
+            f.write('         }\n')
+            f.write('         else\n')
+            f.write('         {\n')
+            f.write('            double hl = MathAbs(high[j] - low[j]) / close[j];\n')
+            f.write('            double hc = MathAbs(high[j] - close[j+1]) / close[j];\n')
+            f.write('            double lc = MathAbs(low[j] - close[j+1]) / close[j];\n')
+            f.write('            double mid = MathMax(hl, hc);\n')
+            f.write('            past_vol[i] = MathMax(mid, lc);\n')
+            f.write('         }\n')
+            f.write('      }\n')
+            f.write('      else\n')
+            f.write('      {\n')
+            f.write('         past_vol[i] = 0;\n')
+            f.write('         future_vol[i] = 0.001;\n')
+            f.write('      }\n')
+            f.write('   }\n\n')
+
+            f.write('   return(rates_total);\n')
+            f.write('}\n')
+
+            # OnDeinit function
+            f.write('\n//+------------------------------------------------------------------+\n')
+            f.write('//| Custom indicator deinitialization function                       |\n')
+            f.write('//+------------------------------------------------------------------+\n')
+            f.write('void OnDeinit(const int reason)\n')
+            f.write('{\n')
+            for i in range(len(self.models)):
+                f.write(f'   if(model_handle{i} != INVALID_HANDLE)\n')
+                f.write(f'      OnnxRelease(model_handle{i});\n')
+            f.write('}\n')
+
+        print(f"✅ Файл {mq5_file_path} успешно создан")
+
+        # 4. Создаём файл проекта MQL5 (.mqproj)
+        proj_file_path = os.path.join(name, f"{name}.mqproj")
+        with open(proj_file_path, "w", encoding="utf-8-sig") as f:
+            f.write('{\n')
+            f.write('  "platform"    :"mt5",\n')
+            f.write('  "program_type":"indicator",\n')
+            f.write('  "copyright"   :"Copyright 2025, MetaQuotes Ltd.",\n')
+            f.write('  "link"        :"https:\\/\\/www.mql5.com",\n')
+            f.write('  "version"     :"1.00",\n')
+            f.write('  "cpu_architecture" :"0",\n')
+            f.write('  "optimize"    :"1",\n')
+            f.write('  "fpzerocheck" :"1",\n')
+            f.write('  "tester_no_cache":"0",\n')
+            f.write('  "tester_everytick_calculate":"0",\n')
+            f.write('  "unicode_character_set":"0",\n')
+            f.write('  "static_libraries":"0",\n\n')
+
+            f.write('  "indicator":\n')
+            f.write('  {\n')
+            f.write('    "window":"1",\n')
+            f.write('    "applied_price":"1"\n')
+            f.write('  },\n\n')
+
+            f.write('  "files":\n')
+            f.write('  [\n')
+            f.write('    {\n')
+            f.write('      "path":"' + name + '.mq5",\n')
+            f.write('      "compile":true,\n')
+            f.write('      "relative_to_project":true\n')
+            f.write('    }\n')
+            f.write('  ]\n')
+            f.write('}\n')
+
+        print(f"✅ Файл {proj_file_path} успешно создан")
+
+        # 3. Создаём поддиректорию для ONNX файлов
+        onnx_dir = os.path.join(name, f"{name}_onnx")  # pepe/pepe_onnx
+        os.makedirs(onnx_dir, exist_ok=True)
+        print(f"✅ Директория для ONNX файлов создана: {onnx_dir}")
+
+        # 4. Сохраняем модели и scaler в поддиректорию
+        initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
+
+        if hasattr(self, 'scaler') and self.scaler is not None:
+            scaler_path = os.path.join(onnx_dir, f"{name}_scaler.pkl")
+            joblib.dump(self.scaler, scaler_path)
+            print(f"✅ Scaler сохранён в {scaler_path}")
+
+        for i in range(len(self.models)):
+            onx = onnxmltools.convert_xgboost(self.models[i], initial_types=initial_type, target_opset=12)
+            model_path = os.path.join(onnx_dir, f"{name}_{i}.onnx")
+            onnxmltools.utils.save_model(onx, model_path)
+            print(f"✅ Модель {i} сохранена в {model_path}")
+
+        print(f"🎉 Все операции в директории '{name}' успешно завершены!")
+
 
 
 class VolClustLightGB(FichEn):
