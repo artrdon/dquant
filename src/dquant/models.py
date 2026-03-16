@@ -573,7 +573,7 @@ class VolClustXGB(FichEn):
             f.write('   ArraySetAsSeries(future_vol, true);\n\n')
 
             for i in range(len(self.models)):
-                f.write(f'   model_handle{i} = OnnxCreateFromBuffer(ExtModelData{i}, ONNX_DEFAULT);\n')
+                f.write(f'   model_handle{i} = OnnxCreateFromBuffer(ExtModelData{i}, ONNX_USE_CPU_ONLY);\n')
                 f.write(f'   if (model_handle{i} == INVALID_HANDLE)\n')
                 f.write('   {\n')
                 f.write(f'      Print("Ошибка загрузки ONNX-модели {i}: ", GetLastError());\n')
@@ -704,7 +704,7 @@ class VolClustXGB(FichEn):
             print(f"✅ Scaler сохранён в {scaler_path}")
 
         for i in range(len(self.models)):
-            onx = onnxmltools.convert_xgboost(self.models[i], initial_types=initial_type, target_opset=12)
+            onx = onnxmltools.convert_xgboost(self.models[i], initial_types=initial_type, target_opset=9)
             model_path = os.path.join(onnx_dir, f"{name}_{i}.onnx")
             onnxmltools.utils.save_model(onx, model_path)
             print(f"✅ Модель {i} сохранена в {model_path}")
