@@ -107,11 +107,11 @@ class FichEn:
                     h_o * (h_o - c_o) + l_o * (l_o - c_o)
                 )
                 feature_list_final.append('rogers_satchell')
-            elif i == 'return':
-                data['return'] = np.log(data['close'] / data['close'].shift(1)).fillna(0)
+            elif i == 'returns':
+                data['returns'] = np.log(data['close'] / data['close'].shift(1)).fillna(0)
                 feature_list_final.append('return')
-            elif i == 'abs_return':
-                data['abs_return'] = np.log(data['close'] / data['close'].shift(1)).fillna(0).abs()
+            elif i == 'abs_returns':
+                data['abs_returns'] = np.log(data['close'] / data['close'].shift(1)).fillna(0).abs()
                 feature_list_final.append('abs_return')
             elif i == 'gap':
                 data['gap'] = (data['open'] - data['close'].shift(1)).fillna(0) / (close_price + epsilon)
@@ -663,6 +663,7 @@ class VolClustXGB(FichEn):
 
     def save_to_mql5(self, name):
         # 1. Создаём основную директорию
+        epsilon = 1e-10
         os.makedirs(name, exist_ok=True)
         print(f"Директория '{name}' создана или уже существует")
 
@@ -678,7 +679,6 @@ class VolClustXGB(FichEn):
             f.write("//|                                                  Made by dquant. |\n")
             f.write("//|                                             https://dquant.space |\n")
             f.write("//+------------------------------------------------------------------+\n")
-            f.write("#property indicator_chart_window\n")
             f.write("#property indicator_buffers 2\n")
             f.write("#property indicator_plots   2\n")
             f.write("#property indicator_color1  clrGreen\n")
@@ -852,25 +852,22 @@ class VolClustXGB(FichEn):
                     f.write('        TR[i] = MathMax(high_low, MathMax(hc, lc));\n')
                     f.write('        \n')
                 elif i == 'parkinson':
-                    # Оценка Паркинсона - более эффективна чем стандартное отклонение
-                    # Использует high-low без учета цен закрытия
-                    data['parkinson'] = np.sqrt(
-                        (1 / (4 * np.log(2))) * (np.log(data['high'] / data['low'])) ** 2
-                    )
+                    f.write('        // parkinson\n')
+                    f.write('        parkinson[i] = MathSqrt(MathPow((1/(4*MathLog(2)))*(MathLog(current.high/current.low)), 2));\n')
+                    f.write('        \n')
                 elif i == 'garman_klass':
-                    # Оценка Гармана-Класса - комбинирует OHLC
-                    # Более точная оценка дневной волатильности
-                    hl = np.log(data['high'] / data['low']) ** 2
-                    co = np.log(data['close'] / data['open']) ** 2
-                    data['garman_klass'] = np.sqrt(0.5 * hl - (2 * np.log(2) - 1) * co)
+                    f.write('        // garman_klass\n')
+                    f.write('        double hl = MathPow(MathLog(current.high / current.low), 2);\n')
+                    f.write('        double co = MathPow(MathLog(current.close / current.open), 2);\n')
+                    f.write('        garman_klass[i] = MathSqrt(0.5 * hl - (2*MathLog(2)-1)*co);\n')
+                    f.write('        \n')
                 elif i == 'rogers_satchell':
-                    # Оценка Роджерса-Сатчелла - учитывает дрейф (тренд)
-                    h_o = np.log(data['high'] / data['open'])
-                    l_o = np.log(data['low'] / data['open'])
-                    c_o = np.log(data['close'] / data['open'])
-                    data['rogers_satchell'] = np.sqrt(
-                        h_o * (h_o - c_o) + l_o * (l_o - c_o)
-                    )
+                    f.write('        // rogers_satchell\n')
+                    f.write('        double h_o = MathLog(current.high / current.open);\n')
+                    f.write('        double l_o = MathLog(current.low / current.open);\n')
+                    f.write('        double c_o = MathLog(current.close / current.open);\n')
+                    f.write('        rogers_satchell[i] = MathSqrt(h_o * (h_o - c_o) + l_o * (l_o - c_o));\n')
+                    f.write('        \n')
                 elif i == 'return':
                     f.write('        // return (log return)\n')
                     f.write('        if(i < window_size - 1 && next.close > 0) \n')
@@ -926,59 +923,7 @@ class VolClustXGB(FichEn):
                     f.write('        {\n')
                     f.write('            close_position[i] = 0.5;\n')
                     f.write('        }\n')
-                elif i[:4] == 'rsi_':
-                    window = ''
-                    for j in range(4, len(i)):
-                        try:
-                            int(i[j])
-                        except ValueError:
-                            break
-                        else:
-                            window += i[j]
-                    window = int(window)
-                    delta = data['close'].diff().iloc[-window:]
-                    if window > len(delta):
-                        raise Exception(
-                            f'Not enough data to calculate RSI: max RSI period is {len(delta)} and yours {window}')
-                    gain = delta.where(delta > 0, 0).mean()
-                    loss = (-delta.where(delta < 0, 0)).mean()
-                    rs = gain / (loss + epsilon)
-                    single_feature_dict[f'rsi_{window}'] = 100 - (100 / (1 + rs))
-                elif i[:4] == 'atr_':
-                    # Average True Range (нормализованный)
-                    window = ''
-                    for j in range(4, len(i)):
-                        try:
-                            int(i[j])
-                        except ValueError:
-                            break
-                        else:
-                            window += i[j]
-                    window = int(window)
-                    delta = data['close']
-                    if window > len(delta):
-                        raise Exception(
-                            f'Not enough data to calculate ATR: max ATR period is {len(delta)} and yours {window}')
-                    tr = data['TR'].iloc[-window:]
-                    single_feature_dict[f'atr_{window}'] = tr.mean() / (data['close'].iloc[-1] + epsilon)
-                elif i[:3] == 'bb_':
-                    window = ''
-                    for j in range(3, len(i)):
-                        try:
-                            int(i[j])
-                        except ValueError:
-                            break
-                        else:
-                            window += i[j]
-                    window = int(window)
-                    delta = data['close']
-                    if window > len(delta):
-                        raise Exception(
-                            f'Not enough data to calculate BB: max BB period is {len(delta)} and yours {window}')
-                    sma = data['close'].iloc[-window:].mean()
-                    std = data['close'].iloc[-window:].std()
-                    single_feature_dict[f'bb_{window}'] = (sma + 2 * std - (sma - 2 * std)) / (sma + epsilon)
-                elif i[:9] == 'roll_rsi_':
+                """elif i[:9] == 'roll_rsi_':
                     window = ''
                     for j in range(9, len(i)):
                         try:
@@ -989,9 +934,6 @@ class VolClustXGB(FichEn):
                             window += i[j]
                     window = int(window)
                     delta = data['close'].diff()
-                    if window > len(delta):
-                        raise Exception(
-                            f'Not enough data to calculate RSI: max RSI period is {len(delta)} and yours {window}')
                     gain = delta.where(delta > 0, 0).rolling(window).mean()
                     loss = (-delta.where(delta < 0, 0)).rolling(window).mean()
                     rs = gain / (loss + epsilon)
@@ -1006,10 +948,6 @@ class VolClustXGB(FichEn):
                         else:
                             window += i[j]
                     window = int(window)
-                    delta = data['close']
-                    if window > len(delta):
-                        raise Exception(
-                            f'Not enough data to calculate ATR: max ATR period is {len(delta)} and yours {window}')
                     tr = data['TR']
                     data[f'roll_atr_{window}'] = tr.rolling(window).mean() / (data['close'] + epsilon)
                 elif i[:8] == 'roll_bb_':
@@ -1022,16 +960,95 @@ class VolClustXGB(FichEn):
                         else:
                             window += i[j]
                     window = int(window)
-                    delta = data['close']
-                    if window > len(delta):
-                        raise Exception(
-                            f'Not enough data to calculate BB: max BB period is {len(delta)} and yours {window}')
                     sma = data['close'].rolling(window=window, min_periods=1).mean()
                     std = data['close'].rolling(window=window, min_periods=1).std()
                     data[f'roll_bb_{window}'] = (sma + 2 * std - (sma - 2 * std)) / (sma + epsilon)
-
+                    """
 
             f.write('    }\n')
+            for i in self.single_features:
+                if i[:4] == 'rsi_':
+                    window = ''
+                    for j in range(4, len(i)):
+                        try:
+                            int(i[j])
+                        except ValueError:
+                            break
+                        else:
+                            window += i[j]
+                    window = int(window)
+                    f.write('        \n')
+                    f.write('        double gain_sum = 0.0;\n')
+                    f.write('        double loss_sum = 0.0;\n')
+                    f.write('        \n')
+                    f.write(f'        for(int i = ArraySize(rates_array) - {window} + 1; i < ArraySize(rates_array); i++)\n')
+                    f.write('        {\n')
+                    f.write('            double delta = rates_array[i].close - rates_array[i-1].close;\n')
+                    f.write('            \n')
+                    f.write('            if(delta > 0)\n')
+                    f.write('                gain_sum += delta;\n')
+                    f.write('            else\n')
+                    f.write('                loss_sum += -delta;\n')
+                    f.write('        }\n')
+                    f.write('        \n')
+                    f.write(f'        double gain = gain_sum / {window};\n')
+                    f.write(f'        double loss = loss_sum / {window};\n')
+                    f.write('        \n')
+                    f.write(f'        double rs = gain / (loss + {epsilon});\n')
+                    f.write(f'        rsi_{window} = 100.0 - (100.0 / (1.0 + rs));\n')
+                    f.write('        \n')
+                elif i[:4] == 'atr_':
+                    # Average True Range (нормализованный)
+                    window = ''
+                    for j in range(4, len(i)):
+                        try:
+                            int(i[j])
+                        except ValueError:
+                            break
+                        else:
+                            window += i[j]
+                    window = int(window)
+                    f.write('        double tr_sum = 0.0;\n')
+                    f.write('        \n')
+                    f.write(f'        for(int i = ArraySize(rates_array) - {window}; i < ArraySize(rates_array); i++)\n')
+                    f.write('        {\n')
+                    f.write('           MqlRates current = rates_array[i];\n')
+                    f.write('           MqlRates next = (i < window_size - 1) ? rates_array[i + 1]: current;\n')
+                    f.write('           double divisor = current.close + epsilon;\n')
+                    f.write('           double high_low = (current.high - current.low) / divisor;\n')
+                    f.write('           double hc = MathAbs(current.high - next.close) / divisor;\n')
+                    f.write('           double lc = MathAbs(current.low - next.close) / divisor;\n')
+                    f.write('           tr_sum += MathMax(high_low, MathMax(hc, lc));\n')
+                    f.write('        }\n')
+                    f.write('        \n')
+                    f.write(f'         atr_{window} = (tr_sum / {window}) / ((rates_array[ArraySize(rates_array) - 1].close - 1) + {epsilon});\n')
+                elif i[:3] == 'bb_':
+                    window = ''
+                    for j in range(3, len(i)):
+                        try:
+                            int(i[j])
+                        except ValueError:
+                            break
+                        else:
+                            window += i[j]
+                    window = int(window)
+                    f.write('        double sma_sum = 0.0;\n')
+                    f.write('        \n')
+                    f.write(f'        for(int i = ArraySize(rates_array) - {window}; i < ArraySize(rates_array); i++)\n')
+                    f.write('        {\n')
+                    f.write('            sma_sum += rates_array[i].close;\n')
+                    f.write('        }\n')
+                    f.write(f'        double sma = sma_sum / {window};\n')
+                    f.write('        \n')
+                    f.write('        double variance = 0.0;\n')
+                    f.write(f'        for(int i = ArraySize(rates_array) - {window}; i < ArraySize(rates_array); i++)\n')
+                    f.write('        {\n')
+                    f.write('            variance += MathPow(rates_array[i].close - sma, 2);\n')
+                    f.write('        }\n')
+                    f.write(f'        double std = MathSqrt(variance / {window});\n')
+                    f.write('        \n')
+                    f.write(f'        bb_{window} = (sma + 2 * std - (sma - 2 * std)) / (sma + {epsilon});\n')
+
             f.write('    \n')
             f.write('    // Flatten features in the same order as Python\n')
             f.write('    int idx = 0;\n')
