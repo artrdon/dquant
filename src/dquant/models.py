@@ -56,7 +56,7 @@ class FichEn:
 
         return X, y
 
-    def _prepare_single_window_features(self, df_window: pd.DataFrame, epsilon: float = 1e-10) -> np.ndarray:
+    def _prepare_single_window_features(self, df_window: pd.DataFrame, feature_list, epsilon: float = 1e-10) -> np.ndarray:
         data = df_window.copy().reset_index(drop=True)
 
         required = ['open', 'high', 'low', 'close']
@@ -65,40 +65,177 @@ class FichEn:
             if col not in data.columns:
                 raise ValueError(f"Колонка '{col}' не найдена")
 
+        feature_list_final = []
+        single_feature_list_final = []
+        single_feature_dict = {}
         close_price = data['close'].values
-
         data['high_low'] = (data['high'] - data['low']) / (close_price + epsilon)
-        prev_close = data['close'].shift(1).fillna(data['close'])
-        data['TR'] = np.maximum(
-            data['high_low'],
-            np.maximum(
-                abs(data['high'] - prev_close) / (close_price + epsilon),
-                abs(data['low'] - prev_close) / (close_price + epsilon)
-            )
-        )
+        for i in feature_list:
+            if i == 'high_low':
+                data['high_low'] = (data['high'] - data['low']) / (close_price + epsilon)
+                feature_list_final.append('high_low')
+            elif i == 'TR':
+                prev_close = data['close'].shift(1).fillna(data['close'])
+                data['TR'] = np.maximum(
+                    data['high_low'],
+                    np.maximum(
+                        abs(data['high'] - prev_close) / (close_price + epsilon),
+                        abs(data['low'] - prev_close) / (close_price + epsilon)
+                    )
+                )
+                feature_list_final.append('TR')
+            elif i == 'parkinson':
+                # Оценка Паркинсона - более эффективна чем стандартное отклонение
+                # Использует high-low без учета цен закрытия
+                data['parkinson'] = np.sqrt(
+                    (1 / (4 * np.log(2))) * (np.log(data['high'] / data['low'])) ** 2
+                )
+                feature_list_final.append('parkinson')
+            elif i == 'garman_klass':
+                # Оценка Гармана-Класса - комбинирует OHLC
+                # Более точная оценка дневной волатильности
+                hl = np.log(data['high'] / data['low']) ** 2
+                co = np.log(data['close'] / data['open']) ** 2
+                data['garman_klass'] = np.sqrt(0.5 * hl - (2 * np.log(2) - 1) * co)
+                feature_list_final.append('garman_klass')
+            elif i == 'rogers_satchell':
+                # Оценка Роджерса-Сатчелла - учитывает дрейф (тренд)
+                h_o = np.log(data['high'] / data['open'])
+                l_o = np.log(data['low'] / data['open'])
+                c_o = np.log(data['close'] / data['open'])
+                data['rogers_satchell'] = np.sqrt(
+                    h_o * (h_o - c_o) + l_o * (l_o - c_o)
+                )
+                feature_list_final.append('rogers_satchell')
+            elif i == 'return':
+                data['return'] = np.log(data['close'] / data['close'].shift(1)).fillna(0)
+                feature_list_final.append('return')
+            elif i == 'abs_return':
+                data['abs_return'] = np.log(data['close'] / data['close'].shift(1)).fillna(0).abs()
+                feature_list_final.append('abs_return')
+            elif i == 'gap':
+                data['gap'] = (data['open'] - data['close'].shift(1)).fillna(0) / (close_price + epsilon)
+                feature_list_final.append('gap')
+            elif i == 'body':
+                data['body'] = abs(data['close'] - data['open']) / (close_price + epsilon)
+                feature_list_final.append('body')
+            elif i == 'shadow':
+                data['shadow'] = (data['high'] - data[['open', 'close']].max(axis=1) +
+                                  (data[['open', 'close']].min(axis=1) - data['low'])) / (close_price + epsilon)
+                feature_list_final.append('shadow')
+            elif i == 'close_position':
+                data['close_position'] = (data['close'] - data['low']) / (data['high'] - data['low'] + epsilon)
+                feature_list_final.append('close_position')
+            elif i[:4] == 'rsi_':
+                window = ''
+                for j in range(4, len(i)):
+                    try:
+                        int(i[j])
+                    except ValueError:
+                        break
+                    else:
+                        window += i[j]
+                window = int(window)
+                delta = data['close'].diff().iloc[-window:]
+                if window > len(delta):
+                    raise Exception(f'Not enough data to calculate RSI: max RSI period is {len(delta)} and yours {window}')
+                gain = delta.where(delta > 0, 0).mean()
+                loss = (-delta.where(delta < 0, 0)).mean()
+                rs = gain / (loss + epsilon)
+                single_feature_dict[f'rsi_{window}'] = 100 - (100 / (1 + rs))
+                single_feature_list_final.append(f'rsi_{window}')
+            elif i[:4] == 'atr_':
+                # Average True Range (нормализованный)
+                window = ''
+                for j in range(4, len(i)):
+                    try:
+                        int(i[j])
+                    except ValueError:
+                        break
+                    else:
+                        window += i[j]
+                window = int(window)
+                delta = data['close']
+                if window > len(delta):
+                    raise Exception(f'Not enough data to calculate ATR: max ATR period is {len(delta)} and yours {window}')
+                tr = data['TR'].iloc[-window:]
+                single_feature_dict[f'atr_{window}'] = tr.mean() / (data['close'].iloc[-1] + epsilon)
+                single_feature_list_final.append(f'atr_{window}')
+            elif i[:3] == 'bb_':
+                window = ''
+                for j in range(3, len(i)):
+                    try:
+                        int(i[j])
+                    except ValueError:
+                        break
+                    else:
+                        window += i[j]
+                window = int(window)
+                delta = data['close']
+                if window > len(delta):
+                    raise Exception(
+                        f'Not enough data to calculate BB: max BB period is {len(delta)} and yours {window}')
+                sma = data['close'].iloc[-window:].mean()
+                std = data['close'].iloc[-window:].std()
+                single_feature_dict[f'bb_{window}'] = (sma + 2 * std - (sma - 2 * std)) / (sma + epsilon)
+                single_feature_list_final.append(f'bb_{window}')
+            elif i[:9] == 'roll_rsi_':
+                window = ''
+                for j in range(9, len(i)):
+                    try:
+                        int(i[j])
+                    except ValueError:
+                        break
+                    else:
+                        window += i[j]
+                window = int(window)
+                delta = data['close'].diff()
+                if window > len(delta):
+                    raise Exception(f'Not enough data to calculate RSI: max RSI period is {len(delta)} and yours {window}')
+                gain = delta.where(delta > 0, 0).rolling(window).mean()
+                loss = (-delta.where(delta < 0, 0)).rolling(window).mean()
+                rs = gain / (loss + epsilon)
+                data[f'roll_rsi_{window}'] = 100 - (100 / (1 + rs))
+                feature_list_final.append(f'roll_rsi_{window}')
+            elif i[:9] == 'roll_atr_':
+                window = ''
+                for j in range(9, len(i)):
+                    try:
+                        int(i[j])
+                    except ValueError:
+                        break
+                    else:
+                        window += i[j]
+                window = int(window)
+                delta = data['close']
+                if window > len(delta):
+                    raise Exception(f'Not enough data to calculate ATR: max ATR period is {len(delta)} and yours {window}')
+                tr = data['TR']
+                data[f'roll_atr_{window}'] = tr.rolling(window).mean() / (data['close'] + epsilon)
+                feature_list_final.append(f'roll_atr_{window}')
+            elif i[:8] == 'roll_bb_':
+                window = ''
+                for j in range(8, len(i)):
+                    try:
+                        int(i[j])
+                    except ValueError:
+                        break
+                    else:
+                        window += i[j]
+                window = int(window)
+                delta = data['close']
+                if window > len(delta):
+                    raise Exception(
+                        f'Not enough data to calculate BB: max BB period is {len(delta)} and yours {window}')
+                sma = data['close'].rolling(window=window, min_periods=1).mean()
+                std = data['close'].rolling(window=window, min_periods=1).std()
+                data[f'roll_bb_{window}'] = (sma + 2 * std - (sma - 2 * std)) / (sma + epsilon)
+                feature_list_final.append(f'roll_bb_{window}')
+            else:
+                raise ValueError(f'There is not a {i}')
 
-        data['return'] = np.log(data['close'] / data['close'].shift(1)).fillna(0)
-        data['abs_return'] = data['return'].abs()
 
-        data['gap'] = (data['open'] - data['close'].shift(1)).fillna(0) / (close_price + epsilon)
-
-        data['body'] = abs(data['close'] - data['open']) / (close_price + epsilon)
-        data['shadow'] = (data['high'] - data[['open', 'close']].max(axis=1) +
-                          (data[['open', 'close']].min(axis=1) - data['low'])) / (close_price + epsilon)
-
-        data['close_position'] = (data['close'] - data['low']) / (data['high'] - data['low'] + epsilon)
-
-        base_features = [
-            'TR',
-            'return',
-            'abs_return',
-            'gap',
-            'body',
-            'shadow',
-            'close_position'
-        ]
-
-        existing_features = [f for f in base_features if f in data.columns]
+        existing_features = [f for f in feature_list_final if f in data.columns]
 
         data = data.fillna(0)
 
@@ -106,6 +243,12 @@ class FichEn:
         for i in range(len(data)):
             for feat in existing_features:
                 feature_vector.append(data[feat].iloc[i])
+
+        for i in single_feature_list_final:
+            feature_vector.append(single_feature_dict[i])
+
+        self.roll_features = existing_features
+        self.single_features = single_feature_list_final
 
         return np.array(feature_vector)
 
@@ -135,16 +278,17 @@ class FichEn:
         return np.array(tr_values)
 
 
-    def fit(self, data, input_bars, horizon, trees_count, show_results=False, feature_func=None, target_func=None):
+    def fit(self, data, feature_list, input_bars, horizon, trees_count, show_results=False, feature_func=None, target_func=None):
         x, y = self._DataSplitting(data, input_bars, horizon, True)
         XX = []
         YY = []
         lx = len(x)
+        self.feature_list = feature_list
         if len(x) != len(y): raise "pizdec"
         for i in range(len(x)):
             startt = time.time()
             if feature_func == None:
-                window_features = self._prepare_single_window_features(x[i])
+                window_features = self._prepare_single_window_features(x[i], feature_list)
             else:
                 window_features = feature_func(x[i])
 
@@ -261,7 +405,7 @@ class FichEn:
 
     def forecast(self, latest_data, feature_func=None, show=False):
         if feature_func == None:
-            X = self._prepare_single_window_features(latest_data)
+            X = self._prepare_single_window_features(latest_data, self.feature_list)
         else:
             X = feature_func(latest_data)
 
@@ -520,7 +664,7 @@ class VolClustXGB(FichEn):
     def save_to_mql5(self, name):
         # 1. Создаём основную директорию
         os.makedirs(name, exist_ok=True)
-        print(f"✅ Директория '{name}' создана или уже существует")
+        print(f"Директория '{name}' создана или уже существует")
 
         # 2. Создаём папку для ONNX файлов
         onnx_dir = os.path.join(name, f"{name}_onnx")
@@ -670,26 +814,18 @@ class VolClustXGB(FichEn):
             f.write('    }\n')
             f.write('    \n')
             f.write('    // Calculate total features: 7 features per bar\n')
-            f.write('    int features_per_bar = 7;\n')
-            f.write('    int total_features = window_size * features_per_bar;\n')
+            f.write(f'    int features_per_bar = {len(self.roll_features)};\n')
+            f.write(f'    int total_features = window_size * features_per_bar + {len(self.single_features)};\n')
             f.write('    ArrayResize(feature_vector, total_features);\n')
             f.write('    \n')
             f.write('    // Arrays for each feature\n')
-            f.write('    double TR[];\n')
-            f.write('    double returns[];\n')
-            f.write('    double abs_returns[];\n')
-            f.write('    double gap[];\n')
-            f.write('    double body[];\n')
-            f.write('    double shadow[];\n')
-            f.write('    double close_position[];\n')
+            for i in self.roll_features:
+                f.write(f'    double {i}[];\n')
+            for i in self.single_features:
+                f.write(f'    double {i};\n')
             f.write('    \n')
-            f.write('    ArrayResize(TR, window_size);\n')
-            f.write('    ArrayResize(returns, window_size);\n')
-            f.write('    ArrayResize(abs_returns, window_size);\n')
-            f.write('    ArrayResize(gap, window_size);\n')
-            f.write('    ArrayResize(body, window_size);\n')
-            f.write('    ArrayResize(shadow, window_size);\n')
-            f.write('    ArrayResize(close_position, window_size);\n')
+            for i in self.roll_features:
+                f.write(f'    ArrayResize({i}, window_size);\n')
             f.write('    \n')
             f.write('    // Calculate features for each bar (from oldest to newest)\n')
             f.write('    for(int i = 0; i < window_size; i++) \n')
@@ -703,67 +839,206 @@ class VolClustXGB(FichEn):
             f.write('        double close_price = current.close;\n')
             f.write('        double divisor = close_price + epsilon;\n')
             f.write('        \n')
-            f.write('        // 1. TR (True Range)\n')
-            f.write('        double high_low = (current.high - current.low) / divisor;\n')
-            f.write('        double hc = MathAbs(current.high - next.close) / divisor;\n')
-            f.write('        double lc = MathAbs(current.low - next.close) / divisor;\n')
-            f.write('        TR[i] = MathMax(high_low, MathMax(hc, lc));\n')
-            f.write('        \n')
-            f.write('        // 2. return (log return)\n')
-            f.write('        if(i < window_size - 1 && next.close > 0) \n')
-            f.write('        {\n')
-            f.write('            returns[i] = MathLog(current.close / next.close);\n')
-            f.write('        } \n')
-            f.write('        else \n')
-            f.write('        {\n')
-            f.write('            returns[i] = 0.0;\n')
-            f.write('        }\n')
-            f.write('        \n')
-            f.write('        // 3. abs_return\n')
-            f.write('        abs_returns[i] = MathAbs(returns[i]);\n')
-            f.write('        \n')
-            f.write('        // 4. gap\n')
-            f.write('        if(i < window_size - 1) \n')
-            f.write('        {\n')
-            f.write('            gap[i] = (current.open - next.close) / divisor;\n')
-            f.write('        } \n')
-            f.write('        else \n')
-            f.write('        {\n')
-            f.write('            gap[i] = 0.0;\n')
-            f.write('        }\n')
-            f.write('        \n')
-            f.write('        // 5. body\n')
-            f.write('        body[i] = MathAbs(current.close - current.open) / divisor;\n')
-            f.write('        \n')
-            f.write('        // 6. shadow\n')
-            f.write('        double max_open_close = MathMax(current.open, current.close);\n')
-            f.write('        double min_open_close = MathMin(current.open, current.close);\n')
-            f.write(
-                '        shadow[i] = ((current.high - max_open_close) + (min_open_close - current.low)) / divisor;\n')
-            f.write('        \n')
-            f.write('        // 7. close_position\n')
-            f.write('        double high_low_diff = current.high - current.low;\n')
-            f.write('        if(high_low_diff > epsilon) \n')
-            f.write('        {\n')
-            f.write('            close_position[i] = (current.close - current.low) / high_low_diff;\n')
-            f.write('        } \n')
-            f.write('        else \n')
-            f.write('        {\n')
-            f.write('            close_position[i] = 0.5;\n')
-            f.write('        }\n')
+            for i in self.roll_features:
+                if i == 'high_low':
+                    f.write('        // high_low\n')
+                    f.write('        high_low[i] = (current.high - current.low) / current.close;\n')
+                    f.write('        \n')
+                elif i == 'TR':
+                    f.write('        // TR (True Range)\n')
+                    f.write('        double high_low = (current.high - current.low) / divisor;\n')
+                    f.write('        double hc = MathAbs(current.high - next.close) / divisor;\n')
+                    f.write('        double lc = MathAbs(current.low - next.close) / divisor;\n')
+                    f.write('        TR[i] = MathMax(high_low, MathMax(hc, lc));\n')
+                    f.write('        \n')
+                elif i == 'parkinson':
+                    # Оценка Паркинсона - более эффективна чем стандартное отклонение
+                    # Использует high-low без учета цен закрытия
+                    data['parkinson'] = np.sqrt(
+                        (1 / (4 * np.log(2))) * (np.log(data['high'] / data['low'])) ** 2
+                    )
+                elif i == 'garman_klass':
+                    # Оценка Гармана-Класса - комбинирует OHLC
+                    # Более точная оценка дневной волатильности
+                    hl = np.log(data['high'] / data['low']) ** 2
+                    co = np.log(data['close'] / data['open']) ** 2
+                    data['garman_klass'] = np.sqrt(0.5 * hl - (2 * np.log(2) - 1) * co)
+                elif i == 'rogers_satchell':
+                    # Оценка Роджерса-Сатчелла - учитывает дрейф (тренд)
+                    h_o = np.log(data['high'] / data['open'])
+                    l_o = np.log(data['low'] / data['open'])
+                    c_o = np.log(data['close'] / data['open'])
+                    data['rogers_satchell'] = np.sqrt(
+                        h_o * (h_o - c_o) + l_o * (l_o - c_o)
+                    )
+                elif i == 'return':
+                    f.write('        // return (log return)\n')
+                    f.write('        if(i < window_size - 1 && next.close > 0) \n')
+                    f.write('        {\n')
+                    f.write('            returns[i] = MathLog(current.close / next.close);\n')
+                    f.write('        } \n')
+                    f.write('        else \n')
+                    f.write('        {\n')
+                    f.write('            returns[i] = 0.0;\n')
+                    f.write('        }\n')
+                    f.write('        \n')
+                elif i == 'abs_return':
+                    f.write('        // abs_return\n')
+                    f.write('        if(i < window_size - 1 && next.close > 0) \n')
+                    f.write('        {\n')
+                    f.write('            returns[i] = MathAbs(MathLog(current.close / next.close));\n')
+                    f.write('        } \n')
+                    f.write('        else \n')
+                    f.write('        {\n')
+                    f.write('            returns[i] = 0.0;\n')
+                    f.write('        }\n')
+                    f.write('        \n')
+                elif i == 'gap':
+                    f.write('        // gap\n')
+                    f.write('        if(i < window_size - 1) \n')
+                    f.write('        {\n')
+                    f.write('            gap[i] = (current.open - next.close) / divisor;\n')
+                    f.write('        } \n')
+                    f.write('        else \n')
+                    f.write('        {\n')
+                    f.write('            gap[i] = 0.0;\n')
+                    f.write('        }\n')
+                    f.write('        \n')
+                elif i == 'body':
+                    f.write('        // body\n')
+                    f.write('        body[i] = MathAbs(current.close - current.open) / divisor;\n')
+                    f.write('        \n')
+                elif i == 'shadow':
+                    f.write('        // shadow\n')
+                    f.write('        double max_open_close = MathMax(current.open, current.close);\n')
+                    f.write('        double min_open_close = MathMin(current.open, current.close);\n')
+                    f.write(
+                        '        shadow[i] = ((current.high - max_open_close) + (min_open_close - current.low)) / divisor;\n')
+                    f.write('        \n')
+                elif i == 'close_position':
+                    f.write('        // close_position\n')
+                    f.write('        double high_low_diff = current.high - current.low;\n')
+                    f.write('        if(high_low_diff > epsilon) \n')
+                    f.write('        {\n')
+                    f.write('            close_position[i] = (current.close - current.low) / high_low_diff;\n')
+                    f.write('        } \n')
+                    f.write('        else \n')
+                    f.write('        {\n')
+                    f.write('            close_position[i] = 0.5;\n')
+                    f.write('        }\n')
+                elif i[:4] == 'rsi_':
+                    window = ''
+                    for j in range(4, len(i)):
+                        try:
+                            int(i[j])
+                        except ValueError:
+                            break
+                        else:
+                            window += i[j]
+                    window = int(window)
+                    delta = data['close'].diff().iloc[-window:]
+                    if window > len(delta):
+                        raise Exception(
+                            f'Not enough data to calculate RSI: max RSI period is {len(delta)} and yours {window}')
+                    gain = delta.where(delta > 0, 0).mean()
+                    loss = (-delta.where(delta < 0, 0)).mean()
+                    rs = gain / (loss + epsilon)
+                    single_feature_dict[f'rsi_{window}'] = 100 - (100 / (1 + rs))
+                elif i[:4] == 'atr_':
+                    # Average True Range (нормализованный)
+                    window = ''
+                    for j in range(4, len(i)):
+                        try:
+                            int(i[j])
+                        except ValueError:
+                            break
+                        else:
+                            window += i[j]
+                    window = int(window)
+                    delta = data['close']
+                    if window > len(delta):
+                        raise Exception(
+                            f'Not enough data to calculate ATR: max ATR period is {len(delta)} and yours {window}')
+                    tr = data['TR'].iloc[-window:]
+                    single_feature_dict[f'atr_{window}'] = tr.mean() / (data['close'].iloc[-1] + epsilon)
+                elif i[:3] == 'bb_':
+                    window = ''
+                    for j in range(3, len(i)):
+                        try:
+                            int(i[j])
+                        except ValueError:
+                            break
+                        else:
+                            window += i[j]
+                    window = int(window)
+                    delta = data['close']
+                    if window > len(delta):
+                        raise Exception(
+                            f'Not enough data to calculate BB: max BB period is {len(delta)} and yours {window}')
+                    sma = data['close'].iloc[-window:].mean()
+                    std = data['close'].iloc[-window:].std()
+                    single_feature_dict[f'bb_{window}'] = (sma + 2 * std - (sma - 2 * std)) / (sma + epsilon)
+                elif i[:9] == 'roll_rsi_':
+                    window = ''
+                    for j in range(9, len(i)):
+                        try:
+                            int(i[j])
+                        except ValueError:
+                            break
+                        else:
+                            window += i[j]
+                    window = int(window)
+                    delta = data['close'].diff()
+                    if window > len(delta):
+                        raise Exception(
+                            f'Not enough data to calculate RSI: max RSI period is {len(delta)} and yours {window}')
+                    gain = delta.where(delta > 0, 0).rolling(window).mean()
+                    loss = (-delta.where(delta < 0, 0)).rolling(window).mean()
+                    rs = gain / (loss + epsilon)
+                    data[f'roll_rsi_{window}'] = 100 - (100 / (1 + rs))
+                elif i[:9] == 'roll_atr_':
+                    window = ''
+                    for j in range(9, len(i)):
+                        try:
+                            int(i[j])
+                        except ValueError:
+                            break
+                        else:
+                            window += i[j]
+                    window = int(window)
+                    delta = data['close']
+                    if window > len(delta):
+                        raise Exception(
+                            f'Not enough data to calculate ATR: max ATR period is {len(delta)} and yours {window}')
+                    tr = data['TR']
+                    data[f'roll_atr_{window}'] = tr.rolling(window).mean() / (data['close'] + epsilon)
+                elif i[:8] == 'roll_bb_':
+                    window = ''
+                    for j in range(8, len(i)):
+                        try:
+                            int(i[j])
+                        except ValueError:
+                            break
+                        else:
+                            window += i[j]
+                    window = int(window)
+                    delta = data['close']
+                    if window > len(delta):
+                        raise Exception(
+                            f'Not enough data to calculate BB: max BB period is {len(delta)} and yours {window}')
+                    sma = data['close'].rolling(window=window, min_periods=1).mean()
+                    std = data['close'].rolling(window=window, min_periods=1).std()
+                    data[f'roll_bb_{window}'] = (sma + 2 * std - (sma - 2 * std)) / (sma + epsilon)
+
+
             f.write('    }\n')
             f.write('    \n')
             f.write('    // Flatten features in the same order as Python\n')
             f.write('    int idx = 0;\n')
             f.write('    for(int i = 0; i < window_size; i++)\n')
             f.write('    {\n')
-            f.write('        feature_vector[idx++] = TR[i];           // TR\n')
-            f.write('        feature_vector[idx++] = returns[i];      // return\n')
-            f.write('        feature_vector[idx++] = abs_returns[i];  // abs_return\n')
-            f.write('        feature_vector[idx++] = gap[i];          // gap\n')
-            f.write('        feature_vector[idx++] = body[i];         // body\n')
-            f.write('        feature_vector[idx++] = shadow[i];       // shadow\n')
-            f.write('        feature_vector[idx++] = close_position[i]; // close_position\n')
+            for i in self.roll_features:
+                f.write(f'        feature_vector[idx++] = {i}[i];           // {i}\n')
             f.write('    }\n')
             f.write('    \n')
             f.write('    return true;\n')
@@ -801,7 +1076,7 @@ class VolClustXGB(FichEn):
             f.write('   }\n')
             f.write('}\n\n')
 
-        print(f"✅ Файл {mq5_file_path} успешно создан")
+        print(f"Файл {mq5_file_path} успешно создан")
 
         # 4. Создаём файл проекта MQL5 (.mqproj)
         proj_file_path = os.path.join(name, f"{name}.mqproj")
@@ -836,12 +1111,12 @@ class VolClustXGB(FichEn):
             f.write('  ]\n')
             f.write('}\n')
 
-        print(f"✅ Файл {proj_file_path} успешно создан")
+        print(f"Файл {proj_file_path} успешно создан")
 
         # 3. Создаём поддиректорию для ONNX файлов
         onnx_dir = os.path.join(name, f"{name}_onnx")  # pepe/pepe_onnx
         os.makedirs(onnx_dir, exist_ok=True)
-        print(f"✅ Директория для ONNX файлов создана: {onnx_dir}")
+        print(f"Директория для ONNX файлов создана: {onnx_dir}")
 
         # 4. Сохраняем модели и scaler в поддиректорию
         initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
@@ -849,15 +1124,15 @@ class VolClustXGB(FichEn):
         if hasattr(self, 'scaler') and self.scaler is not None:
             scaler_path = os.path.join(onnx_dir, f"{name}_scaler.pkl")
             joblib.dump(self.scaler, scaler_path)
-            print(f"✅ Scaler сохранён в {scaler_path}")
+            print(f"Scaler сохранён в {scaler_path}")
 
         for i in range(len(self.models)):
             onx = onnxmltools.convert_xgboost(self.models[i], initial_types=initial_type, target_opset=9)
             model_path = os.path.join(onnx_dir, f"{name}_{i}.onnx")
             onnxmltools.utils.save_model(onx, model_path)
-            print(f"✅ Модель {i} сохранена в {model_path}")
+            print(f"Модель {i} сохранена в {model_path}")
 
-        print(f"🎉 Все операции в директории '{name}' успешно завершены!")
+        print(f"Все операции в директории '{name}' успешно завершены!")
 
 
 
