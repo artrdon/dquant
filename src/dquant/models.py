@@ -10,7 +10,7 @@ from .visual import Visualization
 import time as time
 import numpy as np
 import xgboost
-import lightgbm
+#import lightgbm
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
@@ -21,6 +21,9 @@ from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType
 import warnings
 warnings.filterwarnings('ignore', message='X does not have valid feature names')
+
+import lightgbm as lgb
+
 
 
 class FichEn:
@@ -502,207 +505,7 @@ class FichEn:
     def show_train_results(self):
         self.V.show_errors(self.train_errors, self.val_errors)
 
-
-
-class VolClustGB(FichEn):
-    def __init__(self, sett, default=True, early_stopping=True):
-        self.models = []
-        self.scaler = StandardScaler()
-        self.X_shape = 0
-        self.is_fitted = False
-        self.onnx_load = False
-        self.early_stopping = early_stopping
-        self.V = Visualization('dark')
-        if default:
-            self.base_model = GradientBoostingRegressor(
-                loss='squared_error',
-                learning_rate=0.01,
-                n_estimators=1,
-                max_depth=3,
-                min_samples_split=5,
-                min_samples_leaf=2,
-                subsample=0.8,
-                random_state=42,
-                warm_start=True
-            )
-        else:
-            self.base_model = GradientBoostingRegressor(**sett)
-
-
-    def save(self, name):
-        os.makedirs(name, exist_ok=True)
-        initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
-
-        file_path = os.path.join(name, f"{name}_features.json")
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(self.feature_list, f, ensure_ascii=False, indent=2)
-
-        if hasattr(self, 'scaler'):
-            scaler_path = os.path.join(name, f"{name}_scaler.pkl")
-            joblib.dump(self.scaler, scaler_path)
-
-        for i in range(len(self.models)):
-            onx = convert_sklearn(self.models[i], initial_types=initial_type, target_opset=12)
-
-            file_path = os.path.join(name, f"{name}_{i}.onnx")
-
-            with open(file_path, "wb") as f:
-                f.write(onx.SerializeToString())
-
-
-    def load(self, name):
-        self.loaded_models = []
-
-        if not os.path.exists(name):
-            raise FileNotFoundError(f"Папка {name} не найдена")
-
-        scaler_files = [f for f in os.listdir(name) if f.endswith('_scaler.pkl')]
-        if scaler_files:
-            scaler_path = os.path.join(name, scaler_files[0])
-            self.scaler = joblib.load(scaler_path)
-
-        model_files = [f for f in os.listdir(name) if f.endswith('.onnx')]
-
-        if not model_files:
-            raise FileNotFoundError(f"В папке {name} не найдено .onnx файлов")
-
-        file_path = os.path.join(name, f"{name}_features.json")
-        with open(file_path, 'r', encoding='utf-8') as f:
-            self.feature_list = json.load(f)
-
-        model_files.sort()
-        ml = len(model_files)
-        numbers = {}
-        for f in model_files:
-            match = re.search(r'_(\d+)\.onnx$', f)
-            if match:
-                num = int(match.group(1))
-                numbers[num] = f
-
-        model_files = []
-        for i in range(ml):
-            model_files.append(numbers[i])
-
-
-        for model_file in model_files:
-            model_path = os.path.join(name, model_file)
-            session = ort.InferenceSession(model_path, providers=['CPUExecutionProvider'])
-
-            input_info = session.get_inputs()[0]
-            self.loaded_models.append(session)
-
-        self.onnx_load = True
-
-
-
-
-class VolClustXGB(FichEn):
-    def __init__(self, sett, default=True, early_stopping=True):
-        self.models = []
-        self.scaler = StandardScaler()
-        self.X_shape = 0
-        self.is_fitted = False
-        self.onnx_load = False
-        self.early_stopping = early_stopping
-        self.V = Visualization('dark')
-        if default:
-            self.base_model = xgboost.XGBRegressor(
-                objective='reg:squarederror',
-                learning_rate=0.1,
-                n_estimators=1,
-                max_depth=3,
-                min_child_weight=5,
-                subsample=0.8,
-                random_state=42,
-            )
-        else:
-            self.base_model = xgboost.XGBRegressor(**sett)
-
-
-    def save(self, name):
-        os.makedirs(name, exist_ok=True)
-        initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
-
-        file_path = os.path.join(name, f"{name}_features.json")
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(self.feature_list, f, ensure_ascii=False, indent=2)
-
-        if hasattr(self, 'scaler'):
-            scaler_path = os.path.join(name, f"{name}_scaler.pkl")
-            joblib.dump(self.scaler, scaler_path)
-
-        for i in range(len(self.models)):
-            onx = onnxmltools.convert_xgboost(self.models[i], initial_types=initial_type, target_opset=12)
-
-            file_path = os.path.join(name, f"{name}_{i}.onnx")
-            onnxmltools.utils.save_model(onx, file_path)
-
-
-
-    def load(self, name):
-        self.loaded_models = []
-
-        if not os.path.exists(name):
-            raise FileNotFoundError(f"Папка {name} не найдена")
-
-        file_path = os.path.join(name, f"{name}_features.json")
-        with open(file_path, 'r', encoding='utf-8') as f:
-            self.feature_list = json.load(f)
-
-
-        scaler_files = [f for f in os.listdir(name) if f.endswith('_scaler.pkl')]
-        if scaler_files:
-            scaler_path = os.path.join(name, scaler_files[0])
-            self.scaler = joblib.load(scaler_path)
-
-        model_files = [f for f in os.listdir(name) if f.endswith('.onnx')]
-
-        if not model_files:
-            raise FileNotFoundError(f"В папке {name} не найдено .onnx файлов")
-
-        model_files.sort()
-        ml = len(model_files)
-        numbers = {}
-        for f in model_files:
-            match = re.search(r'_(\d+)\.onnx$', f)
-            if match:
-                num = int(match.group(1))
-                numbers[num] = f
-
-        model_files = []
-        for i in range(ml):
-            model_files.append(numbers[i])
-
-
-        for model_file in model_files:
-            model_path = os.path.join(name, model_file)
-            session = ort.InferenceSession(model_path, providers=['CPUExecutionProvider'])
-
-            input_info = session.get_inputs()[0]
-            self.loaded_models.append(session)
-
-        self.onnx_load = True
-
-        scaler_path = os.path.join(name, f"{name}_scaler.json")
-        scaler_data = {
-            "mean": self.scaler.mean_.tolist() if self.scaler.mean_ is not None else [],
-            "std": self.scaler.scale_.tolist() if self.scaler.scale_ is not None else [],
-            # scale_ = стандартное отклонение
-            "var": self.scaler.var_.tolist() if self.scaler.var_ is not None else []
-        }
-
-        # Добавляем имена признаков, если они есть
-        if hasattr(self, 'feature_names') and self.feature_names:
-            scaler_data["feature_names"] = self.feature_names
-
-        with open(scaler_path, 'w') as f:
-            json.dump(scaler_data, f, indent=2)
-
-        print(f"Коэффициенты нормализации сохранены в {scaler_path}")
-
-    def save_to_mql5(self, name):
-        # 1. Создаём основную директорию
-        #epsilon = 1e-10
+    def save_mql5(self, name):
         scaler_data = {
             "mean": self.scaler.mean_.tolist() if self.scaler.mean_ is not None else [],
             "std": self.scaler.scale_.tolist() if self.scaler.scale_ is not None else [],
@@ -774,7 +577,7 @@ class VolClustXGB(FichEn):
                 f.write(f'      Print("Ошибка загрузки ONNX-модели {i}: ", GetLastError());\n')
                 f.write('      return INIT_FAILED;\n')
                 f.write('   }\n')
-                #f.write(f'   Print("ONNX-модель {i} успешно загружена");\n\n')
+                # f.write(f'   Print("ONNX-модель {i} успешно загружена");\n\n')
 
             f.write('   return(INIT_SUCCEEDED);\n')
             f.write('}\n\n')
@@ -1125,7 +928,7 @@ class VolClustXGB(FichEn):
                 f.write('         }\n')
                 f.write(f'         if(OnnxRun(model_handle{i}, ONNX_USE_CPU_ONLY, input_features, output))\n')
                 f.write('         {\n')
-                f.write(f'           future_vol[{len(self.models)-1-i}] = output[0];\n')
+                f.write(f'           future_vol[{len(self.models) - 1 - i}] = output[0];\n')
                 f.write(f'           past_vol[{len(self.models) - 1 - i}] = 0;\n')
                 f.write('         }\n')
             f.write('   }\n')
@@ -1168,31 +971,10 @@ class VolClustXGB(FichEn):
 
         print(f"Файл {proj_file_path} успешно создан")
 
-        # 3. Создаём поддиректорию для ONNX файлов
-        onnx_dir = os.path.join(name, f"{name}_onnx")  # pepe/pepe_onnx
-        os.makedirs(onnx_dir, exist_ok=True)
-        print(f"Директория для ONNX файлов создана: {onnx_dir}")
-
-        # 4. Сохраняем модели и scaler в поддиректорию
-        initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
-
-        if hasattr(self, 'scaler') and self.scaler is not None:
-            scaler_path = os.path.join(onnx_dir, f"{name}_scaler.pkl")
-            joblib.dump(self.scaler, scaler_path)
-            print(f"Scaler сохранён в {scaler_path}")
-
-        for i in range(len(self.models)):
-            onx = onnxmltools.convert_xgboost(self.models[i], initial_types=initial_type, target_opset=9)
-            model_path = os.path.join(onnx_dir, f"{name}_{i}.onnx")
-            onnxmltools.utils.save_model(onx, model_path)
-            print(f"Модель {i} сохранена в {model_path}")
-
-        print(f"Все операции в директории '{name}' успешно завершены!")
 
 
-
-class VolClustLightGB(FichEn):
-    def __init__(self, sett, default=True, early_stopping=True):
+class VolClustGB(FichEn):
+    def __init__(self, sett, early_stopping=True):
         self.models = []
         self.scaler = StandardScaler()
         self.X_shape = 0
@@ -1200,40 +982,305 @@ class VolClustLightGB(FichEn):
         self.onnx_load = False
         self.early_stopping = early_stopping
         self.V = Visualization('dark')
-        if default:
-            self.base_model = lightgbm.LGBMRegressor(
-                objective='regression',
+        if sett == {}:
+            self.base_model = GradientBoostingRegressor(
+                loss='squared_error',
                 learning_rate=0.01,
                 n_estimators=1,
                 max_depth=3,
-                min_sum_hessian_in_leaf=5,
+                min_samples_split=5,
+                min_samples_leaf=2,
                 subsample=0.8,
-                subsample_freq=1,
                 random_state=42,
-                verbose=-1
+                warm_start=True
             )
         else:
-            self.base_model = lightgbm.LGBMRegressor(**sett)
+            self.base_model = GradientBoostingRegressor(**sett)
+
+    def save(self, name, type_to_save='default'):
+        if type_to_save == 'default':
+            os.makedirs(name, exist_ok=True)
+            initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
+
+            file_path = os.path.join(name, f"{name}_features.json")
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(self.feature_list, f, ensure_ascii=False, indent=2)
+
+            if hasattr(self, 'scaler'):
+                scaler_path = os.path.join(name, f"{name}_scaler.pkl")
+                joblib.dump(self.scaler, scaler_path)
+
+            for i in range(len(self.models)):
+                onx = convert_sklearn(self.models[i], initial_types=initial_type, target_opset=12)
+
+                file_path = os.path.join(name, f"{name}_{i}.onnx")
+
+                with open(file_path, "wb") as f:
+                    f.write(onx.SerializeToString())
+        elif type_to_save == 'mql5':
+            self.save_mql5(name)
+            onnx_dir = os.path.join(name, f"{name}_onnx")
+            os.makedirs(onnx_dir, exist_ok=True)
+            print(f"Директория для ONNX файлов создана: {onnx_dir}")
+
+            # 4. Сохраняем модели и scaler в поддиректорию
+            initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
+
+            if hasattr(self, 'scaler') and self.scaler is not None:
+                scaler_path = os.path.join(onnx_dir, f"{name}_scaler.pkl")
+                joblib.dump(self.scaler, scaler_path)
+                print(f"Scaler сохранён в {scaler_path}")
+
+            for i in range(len(self.models)):
+                onx = convert_sklearn(self.models[i], initial_types=initial_type, target_opset=12)
+                file_path = os.path.join(onnx_dir, f"{name}_{i}.onnx")
+                with open(file_path, "wb") as f:
+                    f.write(onx.SerializeToString())
+                print(f"Модель {i} сохранена в {file_path}")
+
+            print(f"Все операции в директории '{name}' успешно завершены!")
 
 
-    def save(self, name):
-        os.makedirs(name, exist_ok=True)
-        initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
+    def load(self, name):
+        self.loaded_models = []
+
+        if not os.path.exists(name):
+            raise FileNotFoundError(f"Папка {name} не найдена")
+
+        scaler_files = [f for f in os.listdir(name) if f.endswith('_scaler.pkl')]
+        if scaler_files:
+            scaler_path = os.path.join(name, scaler_files[0])
+            self.scaler = joblib.load(scaler_path)
+
+        model_files = [f for f in os.listdir(name) if f.endswith('.onnx')]
+
+        if not model_files:
+            raise FileNotFoundError(f"В папке {name} не найдено .onnx файлов")
 
         file_path = os.path.join(name, f"{name}_features.json")
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(self.feature_list, f, ensure_ascii=False, indent=2)
+        with open(file_path, 'r', encoding='utf-8') as f:
+            self.feature_list = json.load(f)
 
-        if hasattr(self, 'scaler'):
-            scaler_path = os.path.join(name, f"{name}_scaler.pkl")
-            joblib.dump(self.scaler, scaler_path)
+        model_files.sort()
+        ml = len(model_files)
+        numbers = {}
+        for f in model_files:
+            match = re.search(r'_(\d+)\.onnx$', f)
+            if match:
+                num = int(match.group(1))
+                numbers[num] = f
 
-        for i in range(len(self.models)):
-            onx = onnxmltools.convert_lightgbm(self.models[i], initial_types=initial_type, zipmap=False, target_opset=12)
+        model_files = []
+        for i in range(ml):
+            model_files.append(numbers[i])
 
-            file_path = os.path.join(name, f"{name}_{i}.onnx")
 
-            onnxmltools.utils.save_model(onx, file_path)
+        for model_file in model_files:
+            model_path = os.path.join(name, model_file)
+            session = ort.InferenceSession(model_path, providers=['CPUExecutionProvider'])
+
+            input_info = session.get_inputs()[0]
+            self.loaded_models.append(session)
+
+        self.onnx_load = True
+
+
+
+
+class VolClustXGB(FichEn):
+    def __init__(self, sett, early_stopping=True):
+        self.models = []
+        self.scaler = StandardScaler()
+        self.X_shape = 0
+        self.is_fitted = False
+        self.onnx_load = False
+        self.early_stopping = early_stopping
+        self.V = Visualization('dark')
+        if sett == {}:
+            self.base_model = xgboost.XGBRegressor(
+                objective='reg:squarederror',
+                learning_rate=0.1,
+                n_estimators=1,
+                max_depth=3,
+                min_child_weight=5,
+                subsample=0.8,
+                random_state=42,
+            )
+        else:
+            self.base_model = xgboost.XGBRegressor(**sett)
+
+
+    def save(self, name, type_to_save='default'):
+        if type_to_save == 'default':
+            os.makedirs(name, exist_ok=True)
+            initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
+
+            file_path = os.path.join(name, f"{name}_features.json")
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(self.feature_list, f, ensure_ascii=False, indent=2)
+
+            if hasattr(self, 'scaler'):
+                scaler_path = os.path.join(name, f"{name}_scaler.pkl")
+                joblib.dump(self.scaler, scaler_path)
+
+            for i in range(len(self.models)):
+                onx = onnxmltools.convert_xgboost(self.models[i], initial_types=initial_type, target_opset=12)
+
+                file_path = os.path.join(name, f"{name}_{i}.onnx")
+                onnxmltools.utils.save_model(onx, file_path)
+        elif type_to_save == 'mql5':
+            self.save_mql5(name)
+            onnx_dir = os.path.join(name, f"{name}_onnx")
+            os.makedirs(onnx_dir, exist_ok=True)
+            print(f"Директория для ONNX файлов создана: {onnx_dir}")
+
+            # 4. Сохраняем модели и scaler в поддиректорию
+            initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
+
+            if hasattr(self, 'scaler') and self.scaler is not None:
+                scaler_path = os.path.join(onnx_dir, f"{name}_scaler.pkl")
+                joblib.dump(self.scaler, scaler_path)
+                print(f"Scaler сохранён в {scaler_path}")
+
+            for i in range(len(self.models)):
+                onx = onnxmltools.convert_xgboost(self.models[i], initial_types=initial_type, target_opset=9)
+                model_path = os.path.join(onnx_dir, f"{name}_{i}.onnx")
+                onnxmltools.utils.save_model(onx, model_path)
+                print(f"Модель {i} сохранена в {model_path}")
+
+            print(f"Все операции в директории '{name}' успешно завершены!")
+
+
+
+    def load(self, name):
+        self.loaded_models = []
+
+        if not os.path.exists(name):
+            raise FileNotFoundError(f"Папка {name} не найдена")
+
+        file_path = os.path.join(name, f"{name}_features.json")
+        with open(file_path, 'r', encoding='utf-8') as f:
+            self.feature_list = json.load(f)
+
+
+        scaler_files = [f for f in os.listdir(name) if f.endswith('_scaler.pkl')]
+        if scaler_files:
+            scaler_path = os.path.join(name, scaler_files[0])
+            self.scaler = joblib.load(scaler_path)
+
+        model_files = [f for f in os.listdir(name) if f.endswith('.onnx')]
+
+        if not model_files:
+            raise FileNotFoundError(f"В папке {name} не найдено .onnx файлов")
+
+        model_files.sort()
+        ml = len(model_files)
+        numbers = {}
+        for f in model_files:
+            match = re.search(r'_(\d+)\.onnx$', f)
+            if match:
+                num = int(match.group(1))
+                numbers[num] = f
+
+        model_files = []
+        for i in range(ml):
+            model_files.append(numbers[i])
+
+
+        for model_file in model_files:
+            model_path = os.path.join(name, model_file)
+            session = ort.InferenceSession(model_path, providers=['CPUExecutionProvider'])
+
+            input_info = session.get_inputs()[0]
+            self.loaded_models.append(session)
+
+        self.onnx_load = True
+
+        scaler_path = os.path.join(name, f"{name}_scaler.json")
+        scaler_data = {
+            "mean": self.scaler.mean_.tolist() if self.scaler.mean_ is not None else [],
+            "std": self.scaler.scale_.tolist() if self.scaler.scale_ is not None else [],
+            # scale_ = стандартное отклонение
+            "var": self.scaler.var_.tolist() if self.scaler.var_ is not None else []
+        }
+
+        # Добавляем имена признаков, если они есть
+        if hasattr(self, 'feature_names') and self.feature_names:
+            scaler_data["feature_names"] = self.feature_names
+
+        with open(scaler_path, 'w') as f:
+            json.dump(scaler_data, f, indent=2)
+
+        print(f"Коэффициенты нормализации сохранены в {scaler_path}")
+
+
+
+
+
+class VolClustLightGB(FichEn):
+    def __init__(self, sett, early_stopping=True):
+        self.models = []
+        self.scaler = StandardScaler()
+        self.X_shape = 0
+        self.is_fitted = False
+        self.onnx_load = False
+        self.early_stopping = early_stopping
+        self.V = Visualization('dark')
+        if sett == {}:
+            self.base_model = lgb.LGBMRegressor(
+                objective='regression',
+                learning_rate=0.1,
+                n_estimators=1,
+                num_leaves= 7,
+                min_data_in_leaf=3,
+                min_data_in_bin=3,
+                seed=42,
+                verbosity=-1
+            )
+        else:
+            self.base_model = (lgb.LGBMRegressor(**sett))
+
+
+    def save(self, name, type_to_save='default'):
+        if type_to_save == 'default':
+            os.makedirs(name, exist_ok=True)
+            initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
+
+            file_path = os.path.join(name, f"{name}_features.json")
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(self.feature_list, f, ensure_ascii=False, indent=2)
+
+            if hasattr(self, 'scaler'):
+                scaler_path = os.path.join(name, f"{name}_scaler.pkl")
+                joblib.dump(self.scaler, scaler_path)
+
+            for i in range(len(self.models)):
+                onx = onnxmltools.convert_lightgbm(self.models[i], initial_types=initial_type, zipmap=False,
+                                                   target_opset=12)
+                file_path = os.path.join(name, f"{name}_{i}.onnx")
+                onnxmltools.utils.save_model(onx, file_path)
+        elif type_to_save == 'mql5':
+            self.save_mql5(name)
+            onnx_dir = os.path.join(name, f"{name}_onnx")
+            os.makedirs(onnx_dir, exist_ok=True)
+            print(f"Директория для ONNX файлов создана: {onnx_dir}")
+
+            # 4. Сохраняем модели и scaler в поддиректорию
+            initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
+
+            if hasattr(self, 'scaler') and self.scaler is not None:
+                scaler_path = os.path.join(onnx_dir, f"{name}_scaler.pkl")
+                joblib.dump(self.scaler, scaler_path)
+                print(f"Scaler сохранён в {scaler_path}")
+
+            for i in range(len(self.models)):
+                onx = onnxmltools.convert_lightgbm(self.models[i], initial_types=initial_type, zipmap=False,
+                                                   target_opset=12)
+                file_path = os.path.join(onnx_dir, f"{name}_{i}.onnx")
+                onnxmltools.utils.save_model(onx, file_path)
+                print(f"Модель {i} сохранена в {file_path}")
+
+            print(f"Все операции в директории '{name}' успешно завершены!")
 
 
     def load(self, name):
