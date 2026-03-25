@@ -136,6 +136,10 @@ celerybeat.pid
 *.onnx
 *.pkl
 *.png
+*.mq5
+*.mql5
+*.mqproj
+*.json
 
 # Environments
 .env
