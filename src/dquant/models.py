@@ -31,7 +31,7 @@ class FichEn:
             include_volume: bool = True,
     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         data = df.copy()
-
+        self.input_bars = window_in
         required = ['open', 'high', 'low', 'close']
         if include_volume:
             required.append('volume')
@@ -109,10 +109,10 @@ class FichEn:
                 feature_list_final.append('rogers_satchell')
             elif i == 'returns':
                 data['returns'] = np.log(data['close'] / data['close'].shift(1)).fillna(0)
-                feature_list_final.append('return')
+                feature_list_final.append('returns')
             elif i == 'abs_returns':
                 data['abs_returns'] = np.log(data['close'] / data['close'].shift(1)).fillna(0).abs()
-                feature_list_final.append('abs_return')
+                feature_list_final.append('abs_returns')
             elif i == 'gap':
                 data['gap'] = (data['open'] - data['close'].shift(1)).fillna(0) / (close_price + epsilon)
                 feature_list_final.append('gap')
@@ -664,6 +664,14 @@ class VolClustXGB(FichEn):
     def save_to_mql5(self, name):
         # 1. Создаём основную директорию
         epsilon = 1e-10
+        scaler_data = {
+            "mean": self.scaler.mean_.tolist() if self.scaler.mean_ is not None else [],
+            "std": self.scaler.scale_.tolist() if self.scaler.scale_ is not None else [],
+            # scale_ = стандартное отклонение
+            "var": self.scaler.var_.tolist() if self.scaler.var_ is not None else []
+        }
+        mean_str = ','.join(str(x) for x in scaler_data['mean'])
+        std_str = ','.join(str(x) for x in scaler_data['std'])
         os.makedirs(name, exist_ok=True)
         print(f"Директория '{name}' создана или уже существует")
 
@@ -692,6 +700,8 @@ class VolClustXGB(FichEn):
             f.write(f"int bars_to = {len(self.models)};\n")
             f.write(f"double forecast[{len(self.models)}];\n")
             f.write("datetime dt = NULL;\n\n")
+            f.write(f"double mean_[] = {{{mean_str}}};\n\n")
+            f.write(f"double std_[] = {{{std_str}}};\n\n")
 
             f.write("//--- indicator buffers\n")
             f.write("double past_vol[];\n")
@@ -800,7 +810,7 @@ class VolClustXGB(FichEn):
             f.write('//| Order: TR, return, abs_return, gap, body, shadow, close_position |\n')
             f.write('//+------------------------------------------------------------------+\n')
             f.write(
-                'bool PrepareFeaturesForModel(double &feature_vector[], int window_size = 70, double epsilon = 1e-10)\n')
+                f'bool PrepareFeaturesForModel(double &feature_vector[], int window_size = {self.input_bars}, double epsilon = 1e-10)\n')
             f.write('{\n')
             f.write('    MqlRates rates_array[];\n')
             f.write('    \n')
@@ -813,7 +823,7 @@ class VolClustXGB(FichEn):
             f.write('        return false;\n')
             f.write('    }\n')
             f.write('    \n')
-            f.write('    // Calculate total features: 7 features per bar\n')
+            f.write(f'    // Calculate total features: {len(self.roll_features)} features per bar\n')
             f.write(f'    int features_per_bar = {len(self.roll_features)};\n')
             f.write(f'    int total_features = window_size * features_per_bar + {len(self.single_features)};\n')
             f.write('    ArrayResize(feature_vector, total_features);\n')
@@ -868,8 +878,8 @@ class VolClustXGB(FichEn):
                     f.write('        double c_o = MathLog(current.close / current.open);\n')
                     f.write('        rogers_satchell[i] = MathSqrt(h_o * (h_o - c_o) + l_o * (l_o - c_o));\n')
                     f.write('        \n')
-                elif i == 'return':
-                    f.write('        // return (log return)\n')
+                elif i == 'returns':
+                    f.write('        // returns (log returns)\n')
                     f.write('        if(i < window_size - 1 && next.close > 0) \n')
                     f.write('        {\n')
                     f.write('            returns[i] = MathLog(current.close / next.close);\n')
@@ -879,8 +889,8 @@ class VolClustXGB(FichEn):
                     f.write('            returns[i] = 0.0;\n')
                     f.write('        }\n')
                     f.write('        \n')
-                elif i == 'abs_return':
-                    f.write('        // abs_return\n')
+                elif i == 'abs_returns':
+                    f.write('        // abs_returns\n')
                     f.write('        if(i < window_size - 1 && next.close > 0) \n')
                     f.write('        {\n')
                     f.write('            returns[i] = MathAbs(MathLog(current.close / next.close));\n')
@@ -1057,7 +1067,16 @@ class VolClustXGB(FichEn):
             for i in self.roll_features:
                 f.write(f'        feature_vector[idx++] = {i}[i];           // {i}\n')
             f.write('    }\n')
+            for i in self.single_features:
+                f.write(f'    feature_vector[idx++] = {i};\n')
             f.write('    \n')
+            f.write('    for(int i = 0; i < window_size; i++)\n')
+            f.write('    {\n')
+            f.write('       if(std_[i] != 0)\n')
+            f.write('           feature_vector[i] = (feature_vector[i] - mean_[i]) / std_[i];\n')
+            f.write('       else\n')
+            f.write('           feature_vector[i] = 0;\n')
+            f.write('    }\n')
             f.write('    return true;\n')
             f.write('}\n\n')
 
