@@ -1,7 +1,4 @@
 import json
-from traceback import print_tb
-import datetime
-import matplotlib.pyplot as plt
 import joblib
 import re
 import onnxruntime as ort
@@ -12,7 +9,6 @@ from .visual import Visualization
 import time as time
 import numpy as np
 import xgboost
-#import lightgbm
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
@@ -146,43 +142,41 @@ class FichEn:
             elif i == 'month':
                 last_datetime = data['time'].iloc[-1]
                 single_feature_dict[i] = last_datetime.month
-                feature_list_final.append(i)
+                single_feature_list_final.append(i)
 
             elif i == 'day_of_month':
                 last_datetime = data['time'].iloc[-1]
                 single_feature_dict[i] = last_datetime.day
-                feature_list_final.append(i)
+                single_feature_list_final.append(i)
 
             elif i == 'day_of_week':
                 last_datetime = data['time'].iloc[-1]
-                single_feature_dict[i] = last_datetime.weekday
-                feature_list_final.append(i)
+                single_feature_dict[i] = last_datetime.weekday()+1
+                single_feature_list_final.append(i)
 
             elif i == 'hour':
                 last_datetime = data['time'].iloc[-1]
-                #print(last_datetime)
                 single_feature_dict[i] = last_datetime.hour
-                #print(last_datetime.hour)
-                feature_list_final.append(i)
+                single_feature_list_final.append(i)
 
             elif i == 'roll_month':
                 last_datetime = data['time']
-                single_feature_dict[i] = last_datetime.dt.month
+                data[i] = last_datetime.dt.month
                 feature_list_final.append(i)
 
             elif i == 'roll_day_of_month':
                 last_datetime = data['time']
-                single_feature_dict[i] = last_datetime.dt.day
+                data[i] = last_datetime.dt.day
                 feature_list_final.append(i)
 
             elif i == 'roll_day_of_week':
                 last_datetime = data['time']
-                single_feature_dict[i] = last_datetime.dt.weekday
+                data[i] = last_datetime.dt.weekday
                 feature_list_final.append(i)
 
             elif i == 'roll_hour':
                 last_datetime = data['time']
-                single_feature_dict[i] = last_datetime.dt.hour
+                data[i] = last_datetime.dt.hour
                 feature_list_final.append(i)
 
             elif i[:4] == 'rsi_':
@@ -710,7 +704,7 @@ class FichEn:
             f.write('    ArrayResize(feature_vector, total_features);\n')
             f.write('    \n')
             f.write('    // Arrays for each feature\n')
-            f.write('   MqlDateTime dt;\n')
+            f.write('   MqlDateTime timedt;\n')
             for i in self.roll_features:
                 f.write(f'    double {i}[];\n')
             for i in self.single_features:
@@ -930,32 +924,32 @@ class FichEn:
                     f.write(f'                roll_bb_{window}[i] = 0.0;\n')
                     f.write('            }\n')
                 elif i == 'roll_month':
-                    f.write('   TimeToStruct(iTime(_Symbol, _Period, window_size-i), dt);\n')
-                    f.write('   roll_month[i] = dt.month;\n')
+                    f.write('   TimeToStruct(iTime(_Symbol, _Period, window_size-i), timedt);\n')
+                    f.write('   roll_month[i] = timedt.mon;\n')
                 elif i == 'roll_day_of_month':
-                    f.write('   TimeToStruct(iTime(_Symbol, _Period, window_size-i), dt);\n')
-                    f.write('   roll_day_of_month[i] = dt.day;\n')
+                    f.write('   TimeToStruct(iTime(_Symbol, _Period, window_size-i), timedt);\n')
+                    f.write('   roll_day_of_month[i] = timedt.day;\n')
                 elif i == 'roll_day_of_week':
-                    f.write('   TimeToStruct(iTime(_Symbol, _Period, window_size-i), dt);\n')
-                    f.write('   roll_day_of_week[i] = dt.day_of_week;\n')
+                    f.write('   TimeToStruct(iTime(_Symbol, _Period, window_size-i), timedt);\n')
+                    f.write('   roll_day_of_week[i] = timedt.day_of_week;\n')
                 elif i == 'roll_hour':
-                    f.write('   TimeToStruct(iTime(_Symbol, _Period, window_size-i), dt);\n')
-                    f.write('   roll_hour[i] = dt.hour;\n')
+                    f.write('   TimeToStruct(iTime(_Symbol, _Period, window_size-i), timedt);\n')
+                    f.write('   roll_hour[i] = timedt.hour;\n')
             f.write('    }\n')
             f.write('    int last_idx = window_size - 1;\n')
             for i in self.single_features:
                 if i == 'month':
-                    f.write('   TimeToStruct(iTime(_Symbol, _Period, 1), dt);\n')
-                    f.write('   month = dt.month;\n')
+                    f.write('   TimeToStruct(iTime(_Symbol, _Period, 1), timedt);\n')
+                    f.write('   month = timedt.mon;\n')
                 elif i == 'day_of_month':
-                    f.write('   TimeToStruct(iTime(_Symbol, _Period, 1), dt);\n')
-                    f.write('   day_of_month = dt.day;\n')
+                    f.write('   TimeToStruct(iTime(_Symbol, _Period, 1), timedt);\n')
+                    f.write('   day_of_month = timedt.day;\n')
                 elif i == 'day_of_week':
-                    f.write('   TimeToStruct(iTime(_Symbol, _Period, 1), dt);\n')
-                    f.write('   day_of_week = dt.day_of_week;\n')
+                    f.write('   TimeToStruct(iTime(_Symbol, _Period, 1), timedt);\n')
+                    f.write('   day_of_week = timedt.day_of_week;\n')
                 elif i == 'hour':
-                    f.write('   TimeToStruct(iTime(_Symbol, _Period, 1), dt);\n')
-                    f.write('   hour = dt.hour;\n')
+                    f.write('   TimeToStruct(iTime(_Symbol, _Period, 1), timedt);\n')
+                    f.write('   hour = timedt.hour;\n')
                 elif i[:4] == 'rsi_':
                     window = ''
                     for j in range(4, len(i)):
@@ -1353,26 +1347,6 @@ class VolClustXGB(FichEn):
             self.loaded_models.append(session)
 
         self.onnx_load = True
-
-        scaler_path = os.path.join(name, f"{name}_scaler.json")
-        scaler_data = {
-            "mean": self.scaler.mean_.tolist() if self.scaler.mean_ is not None else [],
-            "std": self.scaler.scale_.tolist() if self.scaler.scale_ is not None else [],
-            # scale_ = стандартное отклонение
-            "var": self.scaler.var_.tolist() if self.scaler.var_ is not None else []
-        }
-
-        # Добавляем имена признаков, если они есть
-        if hasattr(self, 'feature_names') and self.feature_names:
-            scaler_data["feature_names"] = self.feature_names
-
-        with open(scaler_path, 'w') as f:
-            json.dump(scaler_data, f, indent=2)
-
-        print(f"Коэффициенты нормализации сохранены в {scaler_path}")
-
-
-
 
 
 class VolClustLightGB(FichEn):
