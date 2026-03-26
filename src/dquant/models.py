@@ -1,4 +1,6 @@
 import json
+from traceback import print_tb
+import datetime
 import matplotlib.pyplot as plt
 import joblib
 import re
@@ -87,65 +89,101 @@ class FichEn:
 
         for i in feature_list:
             if i == 'high_low':
-                data['high_low'] = (data['high'] - data['low']) / (data['close'] + epsilon)
-                feature_list_final.append('high_low')
+                feature_list_final.append(i)
 
             elif i == 'TR':
-                # TR уже рассчитан выше, просто добавляем в список
-                feature_list_final.append('TR')
+                feature_list_final.append(i)
 
             elif i == 'parkinson':
-                data['parkinson'] = np.sqrt(
+                data[i] = np.sqrt(
                     (1 / (4 * np.log(2))) * (np.log(data['high'] / data['low'])) ** 2
                 )
-                feature_list_final.append('parkinson')
+                feature_list_final.append(i)
 
             elif i == 'garman_klass':
                 hl = np.log(data['high'] / data['low']) ** 2
                 co = np.log(data['close'] / data['open']) ** 2
-                data['garman_klass'] = np.sqrt(0.5 * hl - (2 * np.log(2) - 1) * co)
-                feature_list_final.append('garman_klass')
+                data[i] = np.sqrt(0.5 * hl - (2 * np.log(2) - 1) * co)
+                feature_list_final.append(i)
 
             elif i == 'rogers_satchell':
                 h_o = np.log(data['high'] / data['open'])
                 l_o = np.log(data['low'] / data['open'])
                 c_o = np.log(data['close'] / data['open'])
-                data['rogers_satchell'] = np.sqrt(h_o * (h_o - c_o) + l_o * (l_o - c_o))
-                feature_list_final.append('rogers_satchell')
+                data[i] = np.sqrt(h_o * (h_o - c_o) + l_o * (l_o - c_o))
+                feature_list_final.append(i)
 
             elif i == 'returns':
-                data['returns'] = np.log(data['close'] / data['close'].shift(1)).fillna(0)
-                feature_list_final.append('returns')
+                data[i] = np.log(data['close'] / data['close'].shift(1)).fillna(0)
+                feature_list_final.append(i)
 
             elif i == 'abs_returns':
                 # Используем уже рассчитанные returns
                 if 'returns' in data.columns:
-                    data['abs_returns'] = data['returns'].abs()
+                    data[i] = data['returns'].abs()
                 else:
-                    data['abs_returns'] = np.log(data['close'] / data['close'].shift(1)).fillna(0).abs()
-                feature_list_final.append('abs_returns')
+                    data[i] = np.log(data['close'] / data['close'].shift(1)).fillna(0).abs()
+                feature_list_final.append(i)
 
             elif i == 'gap':
-                data['gap'] = (data['open'] - data['close'].shift(1)).fillna(0) / (data['close'] + epsilon)
-                feature_list_final.append('gap')
+                data[i] = (data['open'] - data['close'].shift(1)).fillna(0) / (data['close'] + epsilon)
+                feature_list_final.append(i)
 
             elif i == 'body':
-                data['body'] = abs(data['close'] - data['open']) / (data['close'] + epsilon)
-                feature_list_final.append('body')
+                data[i] = abs(data['close'] - data['open']) / (data['close'] + epsilon)
+                feature_list_final.append(i)
 
             elif i == 'shadow':
-                data['shadow'] = (data['high'] - data[['open', 'close']].max(axis=1) +
+                data[i] = (data['high'] - data[['open', 'close']].max(axis=1) +
                                   (data[['open', 'close']].min(axis=1) - data['low'])) / (data['close'] + epsilon)
-                feature_list_final.append('shadow')
+                feature_list_final.append(i)
 
             elif i == 'close_position':
                 high_low_diff = data['high'] - data['low']
-                data['close_position'] = np.where(
-                    high_low_diff > epsilon,
-                    (data['close'] - data['low']) / high_low_diff,
-                    0.5
-                )
-                feature_list_final.append('close_position')
+                data[i] = np.where(high_low_diff > epsilon, (data['close'] - data['low']) / high_low_diff,0.5)
+                feature_list_final.append(i)
+
+            elif i == 'month':
+                last_datetime = data['time'].iloc[-1]
+                single_feature_dict[i] = last_datetime.month
+                feature_list_final.append(i)
+
+            elif i == 'day_of_month':
+                last_datetime = data['time'].iloc[-1]
+                single_feature_dict[i] = last_datetime.day
+                feature_list_final.append(i)
+
+            elif i == 'day_of_week':
+                last_datetime = data['time'].iloc[-1]
+                single_feature_dict[i] = last_datetime.weekday
+                feature_list_final.append(i)
+
+            elif i == 'hour':
+                last_datetime = data['time'].iloc[-1]
+                #print(last_datetime)
+                single_feature_dict[i] = last_datetime.hour
+                #print(last_datetime.hour)
+                feature_list_final.append(i)
+
+            elif i == 'roll_month':
+                last_datetime = data['time']
+                single_feature_dict[i] = last_datetime.dt.month
+                feature_list_final.append(i)
+
+            elif i == 'roll_day_of_month':
+                last_datetime = data['time']
+                single_feature_dict[i] = last_datetime.dt.day
+                feature_list_final.append(i)
+
+            elif i == 'roll_day_of_week':
+                last_datetime = data['time']
+                single_feature_dict[i] = last_datetime.dt.weekday
+                feature_list_final.append(i)
+
+            elif i == 'roll_hour':
+                last_datetime = data['time']
+                single_feature_dict[i] = last_datetime.dt.hour
+                feature_list_final.append(i)
 
             elif i[:4] == 'rsi_':
                 window = ''
@@ -505,6 +543,7 @@ class FichEn:
     def show_train_results(self):
         self.V.show_errors(self.train_errors, self.val_errors)
 
+
     def save_mql5(self, name):
         scaler_data = {
             "mean": self.scaler.mean_.tolist() if self.scaler.mean_ is not None else [],
@@ -671,6 +710,7 @@ class FichEn:
             f.write('    ArrayResize(feature_vector, total_features);\n')
             f.write('    \n')
             f.write('    // Arrays for each feature\n')
+            f.write('   MqlDateTime dt;\n')
             for i in self.roll_features:
                 f.write(f'    double {i}[];\n')
             for i in self.single_features:
@@ -793,12 +833,130 @@ class FichEn:
                     f.write('            close_position[i] = 0.5;\n')
                     f.write('        }\n')
                     f.write('        \n')
-                # roll features commented out
+                elif i[:9] == 'roll_rsi_':
+                    window = ''
+                    for j in range(9, len(i)):
+                        try:
+                            int(i[j])
+                        except ValueError:
+                            break
+                        else:
+                            window += i[j]
+                    window = int(window)
+                    f.write('        // roll_rsi\n')
+                    f.write('        \n')
+                    f.write(f'            if(i >= {window - 1})\n')
+                    f.write('            {\n')
+                    f.write('                double gain_sum = 0.0;\n')
+                    f.write('                double loss_sum = 0.0;\n')
+                    f.write('                \n')
+                    f.write(f'                for(int j = i - {window - 1}; j <= i; j++)\n')
+                    f.write('                {\n')
+                    f.write('                    if(j > 0)\n')
+                    f.write('                    {\n')
+                    f.write('                        double delta = rates_array[j].close - rates_array[j-1].close;\n')
+                    f.write('                        if(delta > 0)\n')
+                    f.write('                            gain_sum += delta;\n')
+                    f.write('                        else\n')
+                    f.write('                            loss_sum += -delta;\n')
+                    f.write('                    }\n')
+                    f.write('                }\n')
+                    f.write('                \n')
+                    f.write(f'                double gain = gain_sum / {window}.0;\n')
+                    f.write(f'                double loss = loss_sum / {window}.0;\n')
+                    f.write('                double rs = gain / (loss + epsilon);\n')
+                    f.write(f'                roll_rsi_{window}[i] = 100.0 - (100.0 / (1.0 + rs));\n')
+                    f.write('            }\n')
+                    f.write('            else\n')
+                    f.write('            {\n')
+                    f.write(f'                roll_rsi_{window}[i] = 0.0;\n')
+                    f.write('            }\n')
+                    f.write('        \n')
+                elif i[:9] == 'roll_atr_':
+                    window = ''
+                    for j in range(9, len(i)):
+                        try:
+                            int(i[j])
+                        except ValueError:
+                            break
+                        else:
+                            window += i[j]
+                    window = int(window)
+                    f.write('        // roll_atr\n')
+                    f.write(f'            if(i >= {window - 1})\n')
+                    f.write('            {\n')
+                    f.write('                double tr_sum = 0.0;\n')
+                    f.write(f'                for(int j = i - {window - 1}; j <= i; j++)\n')
+                    f.write('                {\n')
+                    f.write('                    tr_sum += TR[j];\n')
+                    f.write('                }\n')
+                    f.write(
+                        f'                roll_atr_{window}[i] = (tr_sum / {window}.0) / (rates_array[i].close + epsilon);\n')
+                    f.write('            }\n')
+                    f.write('            else\n')
+                    f.write('            {\n')
+                    f.write(f'                roll_atr_{window}[i] = 0.0;\n')
+                    f.write('            }\n')
+                elif i[:8] == 'roll_bb_':
+                    window = ''
+                    for j in range(8, len(i)):
+                        try:
+                            int(i[j])
+                        except ValueError:
+                            break
+                        else:
+                            window += i[j]
+                    window = int(window)
+                    f.write('        // roll_bb\n')
+                    f.write(f'            if(i >= {window - 1})\n')
+                    f.write('            {\n')
+                    f.write('                double sma_sum = 0.0;\n')
+                    f.write(f'                for(int j = i - {window - 1}; j <= i; j++)\n')
+                    f.write('                {\n')
+                    f.write('                    sma_sum += rates_array[j].close;\n')
+                    f.write('                }\n')
+                    f.write(f'                double sma = sma_sum / {window}.0;\n')
+                    f.write('                \n')
+                    f.write('                double variance = 0.0;\n')
+                    f.write(f'                for(int j = i - {window - 1}; j <= i; j++)\n')
+                    f.write('                {\n')
+                    f.write('                    variance += MathPow(rates_array[j].close - sma, 2);\n')
+                    f.write('                }\n')
+                    f.write(f'                double std = MathSqrt(variance / {window}.0);\n')
+                    f.write(f'                roll_bb_{window}[i] = (4.0 * std) / (sma + epsilon);\n')
+                    f.write('            }\n')
+                    f.write('            else\n')
+                    f.write('            {\n')
+                    f.write(f'                roll_bb_{window}[i] = 0.0;\n')
+                    f.write('            }\n')
+                elif i == 'roll_month':
+                    f.write('   TimeToStruct(iTime(_Symbol, _Period, window_size-i), dt);\n')
+                    f.write('   roll_month[i] = dt.month;\n')
+                elif i == 'roll_day_of_month':
+                    f.write('   TimeToStruct(iTime(_Symbol, _Period, window_size-i), dt);\n')
+                    f.write('   roll_day_of_month[i] = dt.day;\n')
+                elif i == 'roll_day_of_week':
+                    f.write('   TimeToStruct(iTime(_Symbol, _Period, window_size-i), dt);\n')
+                    f.write('   roll_day_of_week[i] = dt.day_of_week;\n')
+                elif i == 'roll_hour':
+                    f.write('   TimeToStruct(iTime(_Symbol, _Period, window_size-i), dt);\n')
+                    f.write('   roll_hour[i] = dt.hour;\n')
             f.write('    }\n')
             f.write('    int last_idx = window_size - 1;\n')
-            # Single features calculation
             for i in self.single_features:
-                if i[:4] == 'rsi_':
+                if i == 'month':
+                    f.write('   TimeToStruct(iTime(_Symbol, _Period, 1), dt);\n')
+                    f.write('   month = dt.month;\n')
+                elif i == 'day_of_month':
+                    f.write('   TimeToStruct(iTime(_Symbol, _Period, 1), dt);\n')
+                    f.write('   day_of_month = dt.day;\n')
+                elif i == 'day_of_week':
+                    f.write('   TimeToStruct(iTime(_Symbol, _Period, 1), dt);\n')
+                    f.write('   day_of_week = dt.day_of_week;\n')
+                elif i == 'hour':
+                    f.write('   TimeToStruct(iTime(_Symbol, _Period, 1), dt);\n')
+                    f.write('   hour = dt.hour;\n')
+                elif i[:4] == 'rsi_':
                     window = ''
                     for j in range(4, len(i)):
                         try:
