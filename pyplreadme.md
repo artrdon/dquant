@@ -169,6 +169,7 @@ rez = model.forecast(df.iloc[-70:].copy(), show=True)
 ```python
 import pandas as pd
 import MetaTrader5 as mt5
+import datetime as dt
 from dquant.models import VolClustXGB 
 
 
@@ -231,11 +232,11 @@ rez = model.forecast(df.iloc[-70:].copy(), show=True)
 ---
 ## Создание индикатора для Meta Trader 5
 
-Сразу после обучения модели её можно экспортировать в рабочий индикатор на mql5. Сразу после кода обучния нужна еще одна строка кода:
+Сразу после обучения модели её можно экспортировать в рабочий индикатор на mql5. Нужна еще одна строка кода:
 ```python
 model.save('indicator_name', type_to_save='mql5')
 ```
-Готово! Теперь вы можете использовать вами обученные модели в Meta Trader 5.
+Готово! Теперь вы можете использовать ваши обученные модели в Meta Trader 5.
 
 ---
 

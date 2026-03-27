@@ -171,8 +171,7 @@ class FichEn:
 
             elif i == 'roll_day_of_week':
                 last_datetime = data['time']
-                data[i] = last_datetime.dt.weekday
-                feature_list_final.append(i)
+                data[i] = last_datetime.dt.weekday+1
 
             elif i == 'roll_hour':
                 last_datetime = data['time']
