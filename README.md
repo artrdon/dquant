@@ -67,7 +67,6 @@ print(dquant.__version__)  # Должно вывести версию
 import pandas as pd
 import yfinance as yf
 from dquant.models import VolClustXGB 
-from dquant.visual import Visualization
 
 
 # 1. Загружаем данные
@@ -81,11 +80,20 @@ df = pd.DataFrame({
 }, index=df.index)
 
 # 2. Создаем модель
-model = VolClustXGB({}, default=True, early_stopping=True)
+model = VolClustXGB({}, early_stopping=True)
 
 # 3. Обучаем модель
-model.fit(df, input_bars=70, horizon=20, trees_count=200, show_results=True)
-
+features = [
+    'TR',
+    'returns',
+    'abs_returns',
+    'gap',
+    'body',
+    'shadow',
+    'close_position',
+    'roll_atr_14'
+]
+model.fit(df, feature_list=features, input_bars=70, horizon=20, trees_count=200, show_results=True)
 
 # 4. Делаем прогноз
 rez = model.forecast(df.iloc[-70:].copy(), show=True)
@@ -123,7 +131,6 @@ rez = model.forecast(df.iloc[-70:].copy(), show=True)
 import pandas as pd
 import yfinance as yf
 from dquant.models import VolClustXGB 
-from dquant.visual import Visualization
 
 
 # 1. Загружаем данные
@@ -137,10 +144,20 @@ df = pd.DataFrame({
 }, index=df.index)
 
 # 2. Создаем модель
-model = VolClustXGB({}, default=True, early_stopping=True)
+model = VolClustXGB({}, early_stopping=True)
 
 # 3. Обучаем модель
-model.fit(df, input_bars=70, horizon=20, trees_count=200, show_results=True)
+features = [
+    'TR',
+    'returns',
+    'abs_returns',
+    'gap',
+    'body',
+    'shadow',
+    'close_position',
+    'roll_atr_14'
+]
+model.fit(df, feature_list=features, input_bars=70, horizon=20, trees_count=200, show_results=True)
 
 # 4. Делаем прогноз
 rez = model.forecast(df.iloc[-70:].copy(), show=True)
@@ -152,7 +169,6 @@ rez = model.forecast(df.iloc[-70:].copy(), show=True)
 import pandas as pd
 import MetaTrader5 as mt5
 from dquant.models import VolClustXGB 
-from dquant.visual import Visualization
 
 
 symbol = "EURUSD"          # какой символ смотреть
@@ -186,21 +202,39 @@ if rates is None or len(rates) == 0:
 # Превращаем в DataFrame
 df = pd.DataFrame(rates)
 df['time'] = pd.to_datetime(df['time'], unit='s')
-df.set_index('time', inplace=True)
 
 df.rename(columns={
     'tick_volume': 'volume'
 }, inplace=True)
 
 # Создаем модель
-model = VolClustXGB({}, default=True, early_stopping=True)
+model = VolClustXGB({}, early_stopping=True)
 
 # Обучаем модель
-model.fit(df, input_bars=70, horizon=20, trees_count=200, show_results=True)
+features = [
+    'TR',
+    'returns',
+    'abs_returns',
+    'gap',
+    'body',
+    'shadow',
+    'close_position',
+    'roll_atr_14'
+]
+model.fit(df, feature_list=features, input_bars=70, horizon=20, trees_count=200, show_results=True)
 
 # Делаем прогноз
 rez = model.forecast(df.iloc[-70:].copy(), show=True)
 ```
+---
+## Создание индикатора для Meta Trader 5
+
+Сразу после обучения модели её можно экспортировать в рабочий индикатор на mql5. Сразу после кода обучния нужна еще одна строка кода:
+```python
+model.save('indicator_name', type_to_save='mql5')
+```
+Готово! Теперь вы можете использовать вами обученные модели в Meta Trader 5.
+
 ---
 
 ## Как внести вклад

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dquant"
-version = "1.0.0"
+version = "1.1.0"
 authors = [
   { name="Denis Makarov" },
 ]
@@ -17,7 +17,6 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
-# Зависимости, которые будут установлены вместе с вашей библиотекой
 dependencies = [
     "cycler>=0.11.0",
     "joblib>=1.2.0",
@@ -34,7 +33,6 @@ dependencies = [
     "onnxmltools>=1.11.0"
 ]
 
-# Если нужны опциональные зависимости (например, для разработки)
 #[project.optional-dependencies]
 #dev = ["pytest", "black"]
 

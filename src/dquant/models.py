@@ -1349,7 +1349,7 @@ class VolClustXGB(FichEn):
         self.onnx_load = True
 
 
-class VolClustLightGB(FichEn):
+class VolClustLightGBM(FichEn):
     def __init__(self, sett, early_stopping=True):
         self.models = []
         self.scaler = StandardScaler()

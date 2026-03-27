@@ -1,6 +1,6 @@
 # Документация библиотеки dquant
 
-**Версия:** 1.0.0  
+**Версия:** 1.1.0  
 **Лицензия:** MIT  
 **GitHub:** [github.com/artrdon/dquant](https://github.com/artrdon/dquant)  
 **PyPI:** [pypi.org/project/dquant](https://pypi.org/project/dquant)  
@@ -147,8 +147,6 @@ print(dquant.__version__)
 import pandas as pd
 import yfinance as yf
 from dquant.models import VolClustXGB 
-from dquant.visual import Visualization
-
 
 # 1. Загружаем данные
 df = yf.download("BTC-USD", start="2020-01-01", interval='1d')
@@ -161,10 +159,20 @@ df = pd.DataFrame({
 }, index=df.index)
 
 # 2. Создаем модель
-model = VolClustXGB({}, default=True, early_stopping=True)
+model = VolClustXGB({}, early_stopping=True)
 
 # 3. Обучаем модель
-model.fit(df, input_bars=70, horizon=20, trees_count=200, show_results=True)
+features = [
+    'TR',
+    'returns',
+    'abs_returns',
+    'gap',
+    'body',
+    'shadow',
+    'close_position',
+    'roll_atr_14'
+]
+model.fit(df, feature_list=features, input_bars=70, horizon=20, trees_count=200, show_results=True)
 
 
 # 4. Делаем прогноз
@@ -198,7 +206,17 @@ model = VolClustXGB({}, default=True, early_stopping=True)
 
 **Шаг 3: Обучение**
 ```python
-model.fit(df, input_bars=70, horizon=20, trees_count=200, show_results=True)
+features = [
+    'TR',
+    'returns',
+    'abs_returns',
+    'gap',
+    'body',
+    'shadow',
+    'close_position',
+    'roll_atr_14'
+]
+model.fit(df, feature_list=features, input_bars=70, horizon=20, trees_count=200, show_results=True)
 ```
 - `input_bars=70` — сколько свечей использовать в качестве входных данных
 - `horizon=20` — прогнозируем волатильность на 20 дней вперёд
@@ -329,14 +347,25 @@ model.load("btc_vol_model")
 
 **Пример:**
 ```python
-model = VolClustGB({}, default=True, early_stopping=True)
+model = VolClustGB({}, early_stopping=True)
 ```
 
 #### 5.1.2 Метод fit
 
 ```python
+features = [
+    'TR',
+    'returns',
+    'abs_returns',
+    'gap',
+    'body',
+    'shadow',
+    'close_position',
+    'roll_atr_14'
+]
 model.fit(
-    df, 
+    df,
+    feature_list=features,
     input_bars=70, 
     horizon=20, 
     trees_count=200, 
@@ -422,8 +451,18 @@ df = pd.DataFrame({
 }, index=df.index)
 
 # Обучаем модель
-model = VolClustXGB({}, default=True, early_stopping=True)
-model.fit(df, input_bars=70, horizon=20, trees_count=200, show_results=True)
+model = VolClustXGB({}, early_stopping=True)
+features = [
+    'TR',
+    'returns',
+    'abs_returns',
+    'gap',
+    'body',
+    'shadow',
+    'close_position',
+    'roll_atr_14'
+]
+model.fit(df, feature_list=features, input_bars=70, horizon=20, trees_count=200, show_results=True)
 ```
 
 #### 5.2.2 MetaTrader 5
@@ -431,6 +470,7 @@ model.fit(df, input_bars=70, horizon=20, trees_count=200, show_results=True)
 ```python
 import MetaTrader5 as mt5
 import pandas as pd
+from dquant.models import VolClustGB, VolClustXGB, VolClustLightGB
 
 
 symbol = "GOLD"          # какой символ смотреть
@@ -465,7 +505,6 @@ if rates is None or len(rates) == 0:
 # Превращаем в DataFrame
 df = pd.DataFrame(rates)
 df['time'] = pd.to_datetime(df['time'], unit='s')  # правильное время
-df.set_index('time', inplace=True)
 
 
 df.rename(columns={
@@ -473,8 +512,19 @@ df.rename(columns={
 }, inplace=True)
 
 # Обучаем модель
-model = VolClustXGB({}, default=True, early_stopping=True)
-model.fit(df, input_bars=70, horizon=20, trees_count=200, show_results=True)
+model = VolClustXGB({}, early_stopping=True)
+features = [
+    'TR',
+    'returns',
+    'abs_returns',
+    'gap',
+    'body',
+    'shadow',
+    'close_position',
+    'roll_atr_14'
+]
+model.fit(df, feature_list=features, input_bars=70, horizon=20, trees_count=200, show_results=True)
+
 
 ```
 #### 5.2.3 Другие источники
@@ -546,7 +596,6 @@ model.fit(
 import pandas as pd
 import yfinance as yf
 from dquant.models import VolClustGB, VolClustXGB, VolClustLightGB
-from dquant.visual import Visualization
 
 
 # 1. Загружаем данные
@@ -560,10 +609,20 @@ df = pd.DataFrame({
 }, index=df.index)
 
 # 2. Создаем модель
-model = VolClustXGB({}, default=True, early_stopping=True)
+model = VolClustXGB({}, early_stopping=True)
 
 # 3. Обучаем модель
-model.fit(df, input_bars=70, horizon=20, trees_count=200, show_results=True)
+features = [
+    'TR',
+    'returns',
+    'abs_returns',
+    'gap',
+    'body',
+    'shadow',
+    'close_position',
+    'roll_atr_14'
+]
+model.fit(df, feature_list=features, input_bars=70, horizon=20, trees_count=200, show_results=True)
 
 # 4. Делаем прогноз
 rez = model.forecast(df.iloc[-70:].copy(), show=True)
@@ -679,6 +738,11 @@ SOFTWARE.
 - Сохранение и загрузка моделей
 - Поддержка кастомных признаков
 - Документация
+
+### Версия 1.1.0 (27-03-2026)
+- Самостоятелный выбор фич для обучения
+- Экспорт обученный моделей в индикатор для Meta Trader 5
+- Более удобный и понятный синтаксис
 
 ---
 
