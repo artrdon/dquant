@@ -1,6 +1,6 @@
 # Документация библиотеки dquant
 
-**Версия:** 1.1.1  
+**Версия:** 1.1.2  
 **Лицензия:** MIT  
 **GitHub:** [github.com/artrdon/dquant](https://github.com/artrdon/dquant)  
 **PyPI:** [pypi.org/project/dquant](https://pypi.org/project/dquant)  
