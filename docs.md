@@ -1,114 +1,114 @@
-# Документация библиотеки dquant
+# DQuant Library Documentation
 
-**Версия:** 1.1.2  
-**Лицензия:** MIT  
+**Version:** 1.1.2  
+**License:** MIT  
 **GitHub:** [github.com/artrdon/dquant](https://github.com/artrdon/dquant)  
 **PyPI:** [pypi.org/project/dquant](https://pypi.org/project/dquant)  
 
 ---
 
-## Оглавление
+## Table of Contents
 
-1. [Введение](#1-введение)
-   - 1.1 [Что такое dquant?](#11-что-такое-dquant)
-   - 1.2 [Основные возможности](#12-основные-возможности)
-   - 1.3 [Для кого эта библиотека](#13-для-кого-эта-библиотека)
-   - 1.4 [Философия](#14-философия)
-2. [Установка](#2-установка)
-   - 2.1 [Требования](#21-требования)
-   - 2.2 [Установка через pip](#22-установка-через-pip)
-   - 2.3 [Проверка установки](#23-проверка-установки)
-3. [Быстрый старт](#3-быстрый-старт)
-   - 3.1 [Минимальный пример](#31-минимальный-пример)
-   - 3.2 [Пошаговый разбор](#32-пошаговый-разбор)
-4. [Основные концепции](#4-основные-концепции)
-   - 4.1 [Входные данные](#41-входные-данные)
-   - 4.2 [Целевая переменная (таргет)](#42-целевая-переменная-таргет)
-   - 4.3 [Feature engineering](#43-feature-engineering)
-   - 4.4 [Обучение и валидация](#44-обучение-и-валидация)
-   - 4.5 [Визуализация](#45-визуализация)
-   - 4.6 [Сохранение и загрузка моделей](#46-сохранение-и-загрузка-моделей)
-5. [Руководство пользователя](#5-руководство-пользователя)
-   - 5.1 [Классы VolClustGB, VolClustXGB, VolClustLightGBM](#51-классы-VolClustGB-VolClustXGB-VolClustLightGBM)
-     - 5.1.1 [Параметры инициализации](#511-параметры-инициализации)
-     - 5.1.2 [Метод fit](#512-метод-fit)
-     - 5.1.3 [Метод forecast](#513-метод-forecast)
-     - 5.1.4 [Метод save](#514-метод-save)
-     - 5.1.5 [Метод load](#515-метод-load)
-     - 5.1.6 [Метод show_train_results](#516-метод-show_train_results)
-   - 5.2 [Работа с различными источниками данных](#52-работа-с-различными-источниками-данных)
+1. [Introduction](#1-introduction)
+   - 1.1 [What is DQuant?](#11-what-is-DQuant)
+   - 1.2 [Key Features](#12-key-features)
+   - 1.3 [Who is this library for](#13-who-is-this-library-for)
+   - 1.4 [Philosophy](#14-philosophy)
+2. [Installation](#2-installation)
+   - 2.1 [Requirements](#21-requirements)
+   - 2.2 [Installation via pip](#22-installation-via-pip)
+   - 2.3 [Verifying Installation](#23-verifying-installation)
+3. [Quick Start](#3-quick-start)
+   - 3.1 [Minimal Example](#31-minimal-example)
+   - 3.2 [Step-by-Step Breakdown](#32-step-by-step-breakdown)
+4. [Core Concepts](#4-core-concepts)
+   - 4.1 [Input Data](#41-input-data)
+   - 4.2 [Target Variable](#42-target-variable)
+   - 4.3 [Feature Engineering](#43-feature-engineering)
+   - 4.4 [Training and Validation](#44-training-and-validation)
+   - 4.5 [Visualization](#45-visualization)
+   - 4.6 [Saving and Loading Models](#46-saving-and-loading-models)
+5. [User Guide](#5-user-guide)
+   - 5.1 [VolClustGB, VolClustXGB, VolClustLightGBM Classes](#51-volclustgb-volclustxgb-volclustlightgbm-classes)
+     - 5.1.1 [Initialization Parameters](#511-initialization-parameters)
+     - 5.1.2 [fit Method](#512-fit-method)
+     - 5.1.3 [forecast Method](#513-forecast-method)
+     - 5.1.4 [save Method](#514-save-method)
+     - 5.1.5 [load Method](#515-load-method)
+     - 5.1.6 [show_train_results Method](#516-show_train_results-method)
+   - 5.2 [Working with Different Data Sources](#52-working-with-different-data-sources)
      - 5.2.1 [Yahoo Finance](#521-yahoo-finance)
      - 5.2.2 [MetaTrader 5](#522-metatrader-5)
-     - 5.2.3 [Другие источники](#525-другие-источники)
-   - 5.3 [Интерпретация результатов](#53-интерпретация-результатов)
-6. [Продвинутое использование](#6-продвинутое-использование)
-   - 6.1 [Кастомизация фичеинжиниринга](#61-кастомизация-фичеинжиниринга)
-     - 6.1.1 [Передача пользовательской функции](#611-передача-пользовательской-функции)
-   - 6.2 [Настройка гиперпараметров модели](#62-настройка-гиперпараметров-модели)
-7. [Справочник API](#7-справочник-api)
-   - 7.1 [Модуль dquant](#71-модуль-dquant)
-8. [Примеры использования](#8-примеры-использования)
-   - 8.1 [Прогноз волатильности Bitcoin](#81-прогноз-волатильности-bitcoin)
-9. [Часто задаваемые вопросы (FAQ)](#9-часто-задаваемые-вопросы-faq)
-   - 9.1 [Общие вопросы](#91-общие-вопросы)
-   - 9.2 [Вопросы по данным](#92-вопросы-по-данным)
-   - 9.3 [Вопросы по модели](#93-вопросы-по-модели)
-10. [Внесение вклада](#11-внесение-вклада)
-    - 10.1 [Как сообщить об ошибке](#101-как-сообщить-об-ошибке)
-    - 10.2 [Предложение новых функций](#102-предложение-новых-функций)
-11. [Лицензия](#12-лицензия)
-12. [Благодарности](#13-благодарности)
-13. [История изменений](#14-история-изменений)
+     - 5.2.3 [Other Sources](#523-other-sources)
+   - 5.3 [Interpreting Results](#53-interpreting-results)
+6. [Advanced Usage](#6-advanced-usage)
+   - 6.1 [Customizing Feature Engineering](#61-customizing-feature-engineering)
+     - 6.1.1 [Passing a Custom Function](#611-passing-a-custom-function)
+   - 6.2 [Model Hyperparameter Tuning](#62-model-hyperparameter-tuning)
+7. [API Reference](#7-api-reference)
+   - 7.1 [DQuant Module](#71-DQuant-module)
+8. [Usage Examples](#8-usage-examples)
+   - 8.1 [Bitcoin Volatility Forecast](#81-bitcoin-volatility-forecast)
+9. [Frequently Asked Questions (FAQ)](#9-frequently-asked-questions-faq)
+   - 9.1 [General Questions](#91-general-questions)
+   - 9.2 [Data Questions](#92-data-questions)
+   - 9.3 [Model Questions](#93-model-questions)
+10. [Contributing](#10-contributing)
+    - 10.1 [How to Report a Bug](#101-how-to-report-a-bug)
+    - 10.2 [Suggesting New Features](#102-suggesting-new-features)
+11. [License](#11-license)
+12. [Acknowledgments](#12-acknowledgments)
+13. [Changelog](#13-changelog)
 
 ---
 
-## 1. Введение
+## 1. Introduction
 
-### 1.1 Что такое dquant?
+### 1.1 What is DQuant?
 
-**dquant** — это Python-библиотека с открытым исходным кодом для автоматического прогнозирования волатильности финансовых временных рядов с использованием методов машинного обучения. Библиотека берет на себя все этапы построения модели: от сырых ценовых данных до готового прогноза, скрывая технические детали (feature engineering, разделение выборок, визуализацию), но при этом оставляет возможность гибкой настройки для опытных пользователей.
+**DQuant** is an open-source Python library for automated volatility forecasting of financial time series using machine learning methods. The library handles all stages of model building: from raw price data to ready-made forecasts, hiding technical details (feature engineering, data splitting, visualization), while still allowing flexible customization for experienced users.
 
-Ключевая идея: **трейдеру не нужно знать машинное обучение, чтобы использовать ИИ для прогнозирования волатильности.**
+Key idea: **a trader doesn't need to know machine learning to use AI for volatility forecasting.**
 
-### 1.2 Основные возможности
+### 1.2 Key Features
 
-- **Автоматический feature engineering** — создание десятков признаков из сырых ценовых данных.
-- **Автоматическое построение целевой переменной** — расчёт реализованной волатильности на заданном горизонте без look-ahead bias.
-- **Интеллектуальное разделение данных** — сохранение временной структуры при разделении на train/validation.
-- **Градиентный бустинг/XGBoost/LightGBM** с ранней остановкой.
-- **Визуализация процесса обучения** — график ошибок на обучающей и валидационной выборках.
-- **Сохранение и загрузка моделей** — обучил один раз, используй всегда.
-- **Гибкая кастомизация** — свои признаки, параметры модели.
-- **Интеграция с любыми источниками данных** — Yahoo Finance, MetaTrader 5 и др.
+- **Automated feature engineering** — creates dozens of features from raw price data.
+- **Automated target variable construction** — calculates realized volatility over a given horizon without look-ahead bias.
+- **Intelligent data splitting** — preserves temporal structure when splitting into train/validation.
+- **Gradient Boosting/XGBoost/LightGBM** with early stopping.
+- **Training visualization** — error plot on training and validation sets.
+- **Save and load models** — train once, use forever.
+- **Flexible customization** — your own features, model parameters.
+- **Integration with any data source** — Yahoo Finance, MetaTrader 5, and others.
 
-### 1.3 Для кого эта библиотека
+### 1.3 Who is this library for
 
-| Аудитория | Зачем им dquant |
-|:---|:---|
-| **Трейдеры (алгоритмические)** | Для калибровки моделей, управления рисками, выставления стопов |
-| **Трейдеры (дискреционные)** | Для оценки рыночного режима, определения размера позиции |
-| **Количественные аналитики** | Для быстрого прототипирования моделей волатильности |
-| **Разработчики торговых систем** | Для встраивания прогнозов в свои пайплайны |
-| **Студенты и исследователи** | Как готовый бенчмарк и учебный пример |
+| Audience | Why they need DQuant                                   |
+|:---|:-------------------------------------------------------|
+| **Traders (algorithmic)** | For model calibration, risk management, setting stops  |
+| **Traders (discretionary)** | For assessing market regime, determining position size |
+| **Quantitative analysts** | For rapid volatility model prototyping                 |
+| **Trading system developers** | For embedding forecasts into their pipelines           |
+| **Students and researchers** | As a ready-made benchmark and learning example         |
 
-### 1.4 Философия
+### 1.4 Philosophy
 
-dquant построен на трёх принципах:
+DQuant is built on three principles:
 
-1. **Простота для новичков** — чтобы использовать библиотеку, не нужно быть дата-сайентистом.
-2. **Мощь для профессионалов** — гибкая настройка для тех, кто хочет копать глубже.
-3. **Прозрачность** — вы всегда видите, что происходит (графики, метрики), и можете интерпретировать результаты.
+1. **Simplicity for beginners** — you don't need to be a data scientist to use the library.
+2. **Power for professionals** — flexible customization for those who want to dig deeper.
+3. **Transparency** — you always see what's happening (graphs, metrics) and can interpret the results.
 
 ---
 
-## 2. Установка
+## 2. Installation
 
-### 2.1 Требования
+### 2.1 Requirements
 
-- Python 3.7 или выше
-- pip (менеджер пакетов Python)
+- Python 3.7 or higher
+- pip (Python package manager)
 
-**Зависимости (устанавливаются автоматически):**
+**Dependencies (installed automatically):**
 - `cycler >= 0.11.0`
 - `joblib >= 1.2.0`
 - `lightgbm >= 3.3.0`
@@ -123,32 +123,32 @@ dquant построен на трёх принципах:
 - `onnxconverter-common >= 1.9.0`
 - `onnxmltools >= 1.11.0`
 
-### 2.2 Установка через pip
+### 2.2 Installation via pip
 
 ```bash
 pip install dquant
 ```
 
-### 2.3 Проверка установки
+### 2.3 Verifying Installation
 
 ```python
 import dquant
 print(dquant.__version__)
-# Должно вывести версию
+# Should output the version
 ```
 
 ---
 
-## 3. Быстрый старт
+## 3. Quick Start
 
-### 3.1 Минимальный пример
+### 3.1 Minimal Example
 
 ```python
 import pandas as pd
 import yfinance as yf
 from dquant.models import VolClustXGB 
 
-# 1. Загружаем данные
+# 1. Load data
 df = yf.download("BTC-USD", start="2020-01-01", interval='1d')
 df = pd.DataFrame({
     'open': df[('Open', 'BTC-USD')].values,
@@ -158,10 +158,10 @@ df = pd.DataFrame({
     'volume': df[('Volume', 'BTC-USD')].values
 }, index=df.index)
 
-# 2. Создаем модель
+# 2. Create model
 model = VolClustXGB({}, early_stopping=True)
 
-# 3. Обучаем модель
+# 3. Train model
 features = [
     'TR',
     'returns',
@@ -175,17 +175,17 @@ features = [
 model.fit(df, feature_list=features, input_bars=70, horizon=20, trees_count=200, show_results=True)
 
 
-# 4. Делаем прогноз
+# 4. Make forecast
 rez = model.forecast(df.iloc[-70:].copy(), show=True)
 ```
 
-### 3.2 Пошаговый разбор
+### 3.2 Step-by-Step Breakdown
 
-**Шаг 1: Загрузка данных**
+**Step 1: Loading Data**
 ```python
 df = yf.download("BTC-USD", start="2020-01-01", interval='1d')
 ```
-Мы используем Yahoo Finance для получения исторических данных. Далее создаем новый DataFrame на основе наших данных:
+We use Yahoo Finance to get historical data. Then we create a new DataFrame based on our data:
 ```python
 df = pd.DataFrame({
     'open': df[('Open', 'BTC-USD')].values,
@@ -196,15 +196,15 @@ df = pd.DataFrame({
 }, index=df.index)
 ```
 
-Результат — pandas DataFrame с колонками open, high, low, close, volume.
+The result is a pandas DataFrame with columns open, high, low, close, volume.
 
-**Шаг 2: Создание модели**
+**Step 2: Creating the Model**
 ```python
 model = VolClustXGB({}, early_stopping=True)
 ```
-Инициализируем модель с параметрами по умолчанию и с ранней остановкой.
+Initialize the model with default parameters and early stopping.
 
-**Шаг 3: Обучение**
+**Step 3: Training**
 ```python
 features = [
     'TR',
@@ -218,36 +218,35 @@ features = [
 ]
 model.fit(df, feature_list=features, input_bars=70, horizon=20, trees_count=200, show_results=True)
 ```
-- `input_bars=70` — сколько свечей использовать в качестве входных данных
-- `horizon=20` — прогнозируем волатильность на 20 дней вперёд
-- `trees_count=200` — максимальное количество деревьев в градиентном бустинге
-- `show_results=True ` — показать график ошибок после обучения
+- `input_bars=70` — how many candles to use as input data
+- `horizon=20` — forecast volatility for the next 20 days
+- `trees_count=200` — maximum number of trees in gradient boosting
+- `show_results=True` — show error plot after training
 
-После обучения автоматически появится график ошибок на train и validation.
+After training, an error plot for train and validation will automatically appear.
 
-**Шаг 4: Прогноз**
+**Step 4: Forecast**
 ```python
 rez = model.forecast(df.iloc[-70:].copy(), show=True)
 ```
-Передаём последние 70 свечей, получаем прогноз волатильности на следующие 20 дней.
+Pass the last 70 candles, get volatility forecast for the next 20 days.
 
-Прогноз волатильности выйдет в виде графика.
+The volatility forecast will be displayed as a graph.
 <img src="readmeforecast.png">
-Красным показана волатильность за предыдущие свечи, а зеленым - будущая волатильность.
-
+Red shows volatility for previous candles, green shows future volatility.
 
 ---
 
-## 4. Основные концепции
+## 4. Core Concepts
 
-### 4.1 Входные данные
+### 4.1 Input Data
 
-**Требования к DataFrame:**
+**DataFrame Requirements:**
 
-- Должен содержать колонки с ценами: `open`, `high`, `low`, `close`, `volume (При использовании признаков с объемом)`, `time (При использовании признаков с временем)`
-- Данные должны быть отсортированы по возрастанию времени (от прошлого к будущему)
+- Must contain price columns: `open`, `high`, `low`, `close`, `volume` (when using volume features), `time` (when using time features)
+- Data must be sorted in ascending time order (from past to future)
 
-**Пример корректного DataFrame:**
+**Example of a correct DataFrame:**
 
 | time                | open  | high  | low   | close | volume |
 |:--------------------|:------|:------|:------|:------|:-------|
@@ -255,122 +254,120 @@ rez = model.forecast(df.iloc[-70:].copy(), show=True)
 | 2020-01-03 01:00:00 | 101.5 | 103.0 | 100.5 | 102.0 | 1100000|
 | ...                 | ...   | ...   | ...   | ...   | ...    |
 
+### 4.2 Target Variable
 
-### 4.2 Целевая переменная (таргет)
+The target variable is the **normalized True Range (TR)** for each candle over the forecast horizon.
 
-Целевая переменная — это **нормализованный истинный диапазон (True Range, TR)** для каждой свечи на горизонте предсказания. 
-
-Расчёт TR для одной свечи:
+TR calculation for a single candle:
 
 ```
 TR = max(high - low, |high - close_prev|, |low - close_prev|) / close
 ```
 
-где:
-- `high - low` — диапазон текущей свечи
-- `|high - close_prev|` — разрыв от максимума до предыдущего закрытия
-- `|low - close_prev|` — разрыв от минимума до предыдущего закрытия
-- `close` — цена закрытия текущей свечи (нормализующий множитель)
+where:
+- `high - low` — current candle's range
+- `|high - close_prev|` — gap from high to previous close
+- `|low - close_prev|` — gap from low to previous close
+- `close` — current candle's closing price (normalizing factor)
 
-Для первой свечи в окне, где нет предыдущего закрытия, используется только диапазон `high - low`.
+For the first candle in the window where there is no previous close, only the `high - low` range is used.
 
-Нормализация на цену закрытия делает TR **масштабно-инвариантным**: значение выражается в долях от текущей цены, что позволяет корректно сравнивать волатильность на разных ценовых уровнях.
+Normalization by closing price makes TR **scale-invariant**: the value is expressed as a fraction of the current price, allowing correct comparison of volatility at different price levels.
 
-На выходе функция возвращает массив нормализованных TR для всех свечей в окне.
+The function returns an array of normalized TR for all candles in the window.
 
-### 4.3 Feature engineering
+### 4.3 Feature Engineering
 
-Вы можете выбрать для обучения следующие группы признаков:
+You can select the following feature groups for training:
 
-| Признак | Описание                                                         | Формула |
+| Feature | Description | Formula |
 |---------|------------------------------------------------------------------|---------|
-| `TR` | Истинный диапазон (True Range), нормализованный на цену закрытия | `max(high-low, \|high-prev_close\|, \|low-prev_close\|) / close` |
-| `high_low` | Размах high-low, нормализованный                                 | `(high - low) / close` |
-| `parkinson` | Волатильность Паркинсона                                         | `√((1 / (4 * log(2))) * (log(high / low))²)` |
-| `garman_klass` | Волатильность Гармана-Класса                                     | `√(0.5 * log(high/low)² - (2*log(2)-1) * log(close/open)²)` |
-| `rogers_satchell` | Волатильность Роджерса-Сатчелла                                  | `√(log(high/open)*(log(high/open)-log(close/open)) + log(low/open)*(log(low/open)-log(close/open)))` |
-| `return` | Логарифмическая доходность                                       | `log(close / prev_close)` |
-| `abs_return` | Абсолютное значение доходности                                   | `\|return\|` |
-| `gap` | Гэп между открытием и предыдущим закрытием                       | `(open - prev_close) / close` |
-| `body` | Тело свечи                                                       | `\|close - open\| / close` |
-| `shadow` | Суммарная длина теней (верхняя + нижняя)                         | `((high - max(open,close)) + (min(open,close) - low)) / close` |
-| `close_position` | Позиция закрытия внутри диапазона свечи                          | `(close - low) / (high - low)` |
-| `month` | Месяц (единичное значение, не временной ряд)                     | `datetime.month` |
-| `day_of_month` | День месяца (единичное значение)                                 | `datetime.day` |
-| `day_of_week` | День недели (единичное значение, 1-7)                            | `datetime.weekday() + 1` |
-| `hour` | Час (единичное значение)                                         | `datetime.hour` |
-| `roll_month` | Месяц (для каждой свечи)                                         | `datetime.dt.month` |
-| `roll_day_of_month` | День месяца (для каждой свечи)                                   | `datetime.dt.day` |
-| `roll_day_of_week` | День недели (для каждой свечи, 1-7)                              | `datetime.dt.weekday` |
-| `roll_hour` | Час (для каждой свечи)                                           | `datetime.dt.hour` |
-| `rsi_{window}` | Индекс относительной силы (RSI) для последнего значения          | `100 - (100 / (1 + RS))`, где `RS = средний_прирост / средний_убыток` |
-| `atr_{window}` | Средний истинный диапазон (ATR) для последнего значения          | `среднее(TR) / close` |
-| `bb_{window}` | Полосы Боллинджера (упрощенно) для последнего значения           | `(4 * std) / (sma + ε)` |
-| `roll_rsi_{window}` | Индекс относительной силы (RSI) для каждой свечи                 | `100 - (100 / (1 + RS))` с rolling window |
-| `roll_atr_{window}` | Средний истинный диапазон (ATR) для каждой свечи                 | `rolling_mean(TR) / close` |
-| `roll_bb_{window}` | Полосы Боллинджера (упрощенно) для каждой свечи                  | `(4 * rolling_std) / (rolling_sma + ε)` |
+| `TR` | True Range, normalized by closing price | `max(high-low, \|high-prev_close\|, \|low-prev_close\|) / close` |
+| `high_low` | High-low range, normalized | `(high - low) / close` |
+| `parkinson` | Parkinson volatility | `√((1 / (4 * log(2))) * (log(high / low))²)` |
+| `garman_klass` | Garman-Klass volatility | `√(0.5 * log(high/low)² - (2*log(2)-1) * log(close/open)²)` |
+| `rogers_satchell` | Rogers-Satchell volatility | `√(log(high/open)*(log(high/open)-log(close/open)) + log(low/open)*(log(low/open)-log(close/open)))` |
+| `return` | Logarithmic return | `log(close / prev_close)` |
+| `abs_return` | Absolute return value | `\|return\|` |
+| `gap` | Gap between open and previous close | `(open - prev_close) / close` |
+| `body` | Candle body | `\|close - open\| / close` |
+| `shadow` | Total shadow length (upper + lower) | `((high - max(open,close)) + (min(open,close) - low)) / close` |
+| `close_position` | Close position within candle range | `(close - low) / (high - low)` |
+| `month` | Month (single value, not time series) | `datetime.month` |
+| `day_of_month` | Day of month (single value) | `datetime.day` |
+| `day_of_week` | Day of week (single value, 1-7) | `datetime.weekday() + 1` |
+| `hour` | Hour (single value) | `datetime.hour` |
+| `roll_month` | Month (for each candle) | `datetime.dt.month` |
+| `roll_day_of_month` | Day of month (for each candle) | `datetime.dt.day` |
+| `roll_day_of_week` | Day of week (for each candle, 1-7) | `datetime.dt.weekday` |
+| `roll_hour` | Hour (for each candle) | `datetime.dt.hour` |
+| `rsi_{window}` | Relative Strength Index (RSI) for the last value | `100 - (100 / (1 + RS))`, where `RS = avg_gain / avg_loss` |
+| `atr_{window}` | Average True Range (ATR) for the last value | `average(TR) / close` |
+| `bb_{window}` | Bollinger Bands (simplified) for the last value | `(4 * std) / (sma + ε)` |
+| `roll_rsi_{window}` | Relative Strength Index (RSI) for each candle | `100 - (100 / (1 + RS))` with rolling window |
+| `roll_atr_{window}` | Average True Range (ATR) for each candle | `rolling_mean(TR) / close` |
+| `roll_bb_{window}` | Bollinger Bands (simplified) for each candle | `(4 * rolling_std) / (rolling_sma + ε)` |
 
+- `ε` (epsilon) - a small constant to avoid division by zero
+- All features with the `roll_` prefix are calculated as a time series (for each candle)
+- Features without the `roll_` prefix (except basic `TR`, `return`, `abs_return`, `gap`, `body`, `shadow`, `close_position`) return only the last value
+- All price-related features are divided by the current closing price. This makes them scale-invariant and allows the model to work with different instruments and price levels.
 
-- `ε` (epsilon) - малая константа для избежания деления на ноль
-- Все признаки с префиксом `roll_` рассчитываются как временной ряд (для каждой свечи)
-- Признаки без префикса `roll_` (кроме базовых `TR`, `return`, `abs_return`, `gap`, `body`, `shadow`, `close_position`) возвращают только последнее значение
-- Все признаки, связанные с ценой, делятся на текущую цену закрытия. Это делает их инвариантными к масштабу и позволяет модели работать с разными инструментами и ценовыми уровнями.
+### 4.4 Training and Validation
 
-### 4.4 Обучение и валидация
+During training, data is automatically split into training and validation sets:
 
-При обучении данные автоматически разделяются на обучающую и валидационную выборки:
+- Default: the last 20% of data is used for validation
+- Temporal order is preserved (no random shuffling)
+- Error is tracked on the validation set for early stopping
 
-- По умолчанию: последние 20% данных отводятся под валидацию
-- Временной порядок сохраняется (никакого случайного перемешивания)
-- На валидационной выборке отслеживается ошибка для ранней остановки
+### 4.5 Visualization
 
-### 4.5 Визуализация
+After training, a graph is automatically generated:
 
-После обучения автоматически строится график:
+- Blue line — error on the training set
+- Orange line — error on the validation set
 
-- Синяя линия — ошибка на обучающей выборке
-- Оранжевая линия — ошибка на валидационной выборке
+The graph helps:
+- Visually assess overfitting (when validation error starts to increase)
+- Choose the optimal number of trees
+- Ensure the model is learning adequately
 
-График помогает:
-- Визуально оценить переобучение (когда валидационная ошибка начинает расти)
-- Выбрать оптимальное число деревьев
-- Убедиться, что модель адекватно обучается
+### 4.6 Saving and Loading Models
 
-### 4.6 Сохранение и загрузка моделей
-
-Обученные модели можно сохранять и загружать:
+Trained models can be saved and loaded:
 
 ```python
-# Сохранение
+# Saving
 model.save("btc_vol_model")
 
-# Загрузка
+# Loading
 model.load("btc_vol_model")
 ```
 
-При сохранении сохраняются:
-- Модели
-- Параметры нормализации признаков
+When saving, the following are preserved:
+- Models
+- Feature normalization parameters
 
 ---
 
-## 5. Руководство пользователя
+## 5. User Guide
 
-### 5.1 Классы VolClustGB, VolClustXGB, VolClustLightGBM
+### 5.1 VolClustGB, VolClustXGB, VolClustLightGBM Classes
 
-#### 5.1.1 Параметры инициализации
+#### 5.1.1 Initialization Parameters
 
-| Параметр         | Тип | По умолчанию                         | Описание |
+| Parameter | Type | Default | Description |
 |:-----------------|:---|:-------------------------------------|:---|
-| `sett`           | dict | `Гиперпараметры модели по умолчанию` |Гиперпараметры модели|
-| `early_stopping` | bool | `True`                               | Включить раннюю остановку |
+| `sett` | dict | `Default model hyperparameters` | Model hyperparameters |
+| `early_stopping` | bool | `True` | Enable early stopping |
 
-**Пример:**
+**Example:**
 ```python
 model = VolClustGB({}, early_stopping=True)
 ```
 
-#### 5.1.2 Метод fit
+#### 5.1.2 fit Method
 
 ```python
 features = [
@@ -393,76 +390,76 @@ model.fit(
 )
 ```
 
-**Параметры:**
+**Parameters:**
 
-| Параметр       | Тип          | По умолчанию | Описание                                                            |
+| Parameter | Type | Default | Description |
 |:---------------|:-------------|:-------------|:--------------------------------------------------------------------|
-| `data`         | pd.DataFrame | обязательный | Входные данные                                                      |
-| `feature_list` | list         | обязательный | Признаки для обучения                                               |
-| `input_bars`   | int          | обязательный | Количество свечей, используемых для прогноза                        |
-| `horizon`      | int          | обязательный | Горизонт прогноза (количество шагов вперёд)                         |
-| `trees_count`  | int          | обязательный | Максимальное количество деревьев                                    |
-| `show_results` | bool         | False        | Показывать ли график после обучения                                 |
-| `feature_func` | function     | None         | Использование своей функции для создания признаков             |
-| `target_func`  | function     | None         | Использование своей функции для создания таргетов(целевых значений) |
+| `data` | pd.DataFrame | required | Input data |
+| `feature_list` | list | required | Features for training |
+| `input_bars` | int | required | Number of candles used for forecasting |
+| `horizon` | int | required | Forecast horizon (number of steps ahead) |
+| `trees_count` | int | required | Maximum number of trees |
+| `show_results` | bool | False | Whether to show the plot after training |
+| `feature_func` | function | None | Use custom function for feature creation |
+| `target_func` | function | None | Use custom function for target creation |
 
-#### 5.1.3 Метод forecast
+#### 5.1.3 forecast Method
 
 ```python
 prediction = model.forecast(df)
 ```
-**Параметры:**
 
-| Параметр | Тип          | По умолчанию                                                           | Описание                                                                                                           |
+**Parameters:**
+
+| Parameter | Type | Default | Description |
 |:---|:-------------|:-----------------------------------------------------------------------|:-------------------------------------------------------------------------------------------------------------------|
-| `latest_data` | pd.DataFrame | обязательный                                                           | Данные для прогноза (должны содержать те же колонки, что и при обучении)                                           |
-| `feature_func` | function     | None (обязательно, если при обучении использовалась кастомная функция) | Использование своей функции для создания признаков (признаков), если при обучении использовалась кастомная функция |
-| `show` | bool          | False                                                                  | Показать результаты прогноза                                                                                       |
+| `latest_data` | pd.DataFrame | required | Data for forecast (must contain same columns as during training) |
+| `feature_func` | function | None (required if custom function was used during training) | Use custom function for feature creation if a custom function was used during training |
+| `show` | bool | False | Display forecast results |
 
+Returns volatility forecast for the horizon specified during training.
 
-Возвращает прогноз волатильности на горизонт, заданный при обучении
+#### 5.1.4 save Method
 
-#### 5.1.4 Метод save
 ```python
 model.save('name')
 ```
 
-**Параметры:**
+**Parameters:**
 
-| Параметр | Тип | По умолчанию | Описание                                             |
+| Parameter | Type | Default | Description |
 |:---|:---|:-------------|:-----------------------------------------------------|
-| `name` | str | обязательный | Под каким именем сохранить директорию и модели       |
-| `type_to_save` | str | 'default'     | В каком формате сохранить модели ('default', 'mql5') |
+| `name` | str | required | Name under which to save the directory and models |
+| `type_to_save` | str | 'default' | Format to save models ('default', 'mql5') |
 
-**Сохранение в mql5**
+**Saving to mql5**
 
 ```python
 model.save('name', type_to_save='mql5')
 ```
-Готово! Теперь вы можете использовать ваши обученные модели в Meta Trader 5.
+Done! Now you can use your trained models in Meta Trader 5.
 
-
-#### 5.1.5 Метод load
+#### 5.1.5 load Method
 
 ```python
 model.load('name')
 ```
 
-**Параметры:**
+**Parameters:**
 
-| Параметр | Тип | По умолчанию | Описание |
+| Parameter | Type | Default | Description |
 |:---|:---|:---|:---|
-| `name` | str | обязательный | Имя директории с сохраненными моделями |
+| `name` | str | required | Name of the directory with saved models |
 
-#### 5.1.6 Метод show_train_results
+#### 5.1.6 show_train_results Method
 
 ```python
 model.show_train_results()
 ```
 
-Показывает график ошибок после обучения.
+Shows the error plot after training.
 
-### 5.2 Работа с различными источниками данных
+### 5.2 Working with Different Data Sources
 
 #### 5.2.1 Yahoo Finance
 
@@ -471,7 +468,7 @@ import pandas as pd
 import yfinance as yf
 from dquant.models import VolClustGB, VolClustXGB, VolClustLightGBM
 
-# Скачиваем данные
+# Download data
 df = yf.download("BTC-USD", start="2020-01-01", end="2024-01-01")
 df = pd.DataFrame({
     'open': df[('Open', 'BTC-USD')].values,
@@ -481,7 +478,7 @@ df = pd.DataFrame({
     'volume': df[('Volume', 'BTC-USD')].values
 }, index=df.index)
 
-# Обучаем модель
+# Train model
 model = VolClustXGB({}, early_stopping=True)
 features = [
     'TR',
@@ -505,45 +502,45 @@ import datetime as dt
 from dquant.models import VolClustGB, VolClustXGB, VolClustLightGBM
 
 
-symbol = "GOLD"          # какой символ смотреть
-timeframe = mt5.TIMEFRAME_D1   # M1, M5, M15, H1, D1 и т.д.
-days_back = 3000             # сколько дней истории загрузить
+symbol = "GOLD"          # which symbol to watch
+timeframe = mt5.TIMEFRAME_D1   # M1, M5, M15, H1, D1, etc.
+days_back = 3000             # how many days of history to load
 
 
-# Подключаемся к MT5
+# Connect to MT5
 if not mt5.initialize():
-    print("Не удалось подключиться к MetaTrader5")
+    print("Failed to connect to MetaTrader5")
     quit()
 
-# Проверяем, что символ доступен
+# Check that symbol is available
 if not mt5.symbol_select(symbol, True):
-    print(f"Символ {symbol} не найден или не включён")
+    print(f"Symbol {symbol} not found or not enabled")
     mt5.shutdown()
     quit()
 
-# Вычисляем даты
+# Calculate dates
 to_date = dt.datetime.now() + dt.timedelta(hours=3)
 from_date = to_date - dt.timedelta(days=days_back)
 
-# Загружаем бары
+# Load bars
 rates = mt5.copy_rates_range(symbol, timeframe, from_date, to_date)
 
-mt5.shutdown()  # больше не нужен терминал
+mt5.shutdown()  # terminal no longer needed
 
 if rates is None or len(rates) == 0:
-    print("Нет данных!")
+    print("No data!")
     quit()
 
-# Превращаем в DataFrame
+# Convert to DataFrame
 df = pd.DataFrame(rates)
-df['time'] = pd.to_datetime(df['time'], unit='s')  # правильное время
+df['time'] = pd.to_datetime(df['time'], unit='s')  # correct time
 
 
 df.rename(columns={
     'tick_volume': 'volume'
 }, inplace=True)
 
-# Обучаем модель
+# Train model
 model = VolClustXGB({}, early_stopping=True)
 features = [
     'TR',
@@ -556,36 +553,36 @@ features = [
     'roll_atr_14'
 ]
 model.fit(df, feature_list=features, input_bars=70, horizon=20, trees_count=200, show_results=True)
-
-
 ```
-#### 5.2.3 Другие источники
 
-Библиотека принимает любой pandas DataFrame с колонками цен.
+#### 5.2.3 Other Sources
 
-### 5.3 Интерпретация результатов
+The library accepts any pandas DataFrame with price columns.
+
+### 5.3 Interpreting Results
+
 ```
 model.forecast(data, show=True)
 ```
-Показывает на графике результат прогноза
+Displays the forecast result on a graph
 
 <img src="readmeforecast.png">
 
 ---
 
-## 6. Продвинутое использование
+## 6. Advanced Usage
 
-### 6.1 Кастомизация feature engineering
+### 6.1 Customizing Feature Engineering
 
-#### 6.1.1 Передача пользовательской функции
+#### 6.1.1 Passing a Custom Function
 
-Вы можете передать свою функцию для создания признаков:
+You can pass your own function for feature creation:
 
 ```python
 def my_features(df):
     df = df.copy()
     
-    # Мои уникальные признаки
+    # My unique features
     df['my_ratio'] = (df['high'] - df['low']) / df['close']
     df['my_momentum'] = df['close'].pct_change(5)
     df['my_volume_ratio'] = df['volume'] / df['volume'].rolling(20).mean()
@@ -602,27 +599,28 @@ model.fit(
 )
 ```
 
-### 6.2 Настройка гиперпараметров модели
-Библиотека использует модели GradientBoostingRegressor, XGBRegressor и LGBMRegressor из библиотек sklearn, xgboost, lightgbm соответственно, гиперпараметры настраиваются в соответствии с этими библиотеками.
+### 6.2 Model Hyperparameter Tuning
+
+The library uses GradientBoostingRegressor, XGBRegressor, and LGBMRegressor models from the sklearn, xgboost, and lightgbm libraries respectively. Hyperparameters are tuned according to these libraries.
 
 ---
 
-## 7. Справочник API
+## 7. API Reference
 
-### 7.1 Модуль dquant
+### 7.1 DQuant Module
 
-| Объект             | Описание |
+| Object | Description |
 |:-------------------|:---|
-| `__version__`      | Версия библиотеки |
-| `VolClustGB`       | Класс для прогнозирования волатильности с помощью Gradient Boosting |
-| `VolClustXGB`      | Класс для прогнозирования волатильности с помощью  XGBoost |
-| `VolClustLightGBM` | Класс для прогнозирования волатильности с помощью LightGBM |
+| `__version__` | Library version |
+| `VolClustGB` | Class for volatility forecasting using Gradient Boosting |
+| `VolClustXGB` | Class for volatility forecasting using XGBoost |
+| `VolClustLightGBM` | Class for volatility forecasting using LightGBM |
 
 ---
 
-## 8. Примеры использования
+## 8. Usage Examples
 
-### 8.1 Прогноз волатильности Bitcoin
+### 8.1 Bitcoin Volatility Forecast
 
 ```python
 import pandas as pd
@@ -630,7 +628,7 @@ import yfinance as yf
 from dquant.models import VolClustGB, VolClustXGB, VolClustLightGBM
 
 
-# 1. Загружаем данные
+# 1. Load data
 df = yf.download("BTC-USD", start="2020-01-01", interval='1d', auto_adjust=True)
 df = pd.DataFrame({
     'open': df[('Open', 'BTC-USD')].values,
@@ -640,10 +638,10 @@ df = pd.DataFrame({
     'volume': df[('Volume', 'BTC-USD')].values
 }, index=df.index)
 
-# 2. Создаем модель
+# 2. Create model
 model = VolClustXGB({}, early_stopping=True)
 
-# 3. Обучаем модель
+# 3. Train model
 features = [
     'TR',
     'returns',
@@ -656,80 +654,83 @@ features = [
 ]
 model.fit(df, feature_list=features, input_bars=70, horizon=20, trees_count=200, show_results=True)
 
-# 4. Делаем прогноз
+# 4. Make forecast
 rez = model.forecast(df.iloc[-70:].copy(), show=True)
 ```
----
-
-## 9. Часто задаваемые вопросы (FAQ)
-
-### 9.1 Общие вопросы
-
-**Q: Зачем мне прогнозировать волатильность?**
-
-A: Волатильность используется для:
-- Управления рисками (стоп-лоссы, размер позиции)
-- Выбора стратегии (в высокой волатильности работают одни стратегии, в низкой — другие)
-- Оценки справедливости цены (сильные движения относительно ожидаемой волатильности могут быть сигналом)
-- Хеджирования
-
-**Q: Чем dquant отличается от других библиотек для прогнозирования волатильности?**
-
-A: dquant предлагает уникальное сочетание:
-- Полная автоматизация — не нужно думать о feature engineering и сборе данных
-- Простота для новичков — одна строка кода для обучения
-- Гибкость для профи — кастомизация любого этапа
-- Специализация именно на волатильности (в отличие от общих ML-библиотек)
-
-**Q: Могу ли я использовать dquant для криптовалют?**
-
-A: Да, библиотека работает с любыми временными рядами, включая криптовалюты. Подходят данные с Binance, Bybit и других бирж.
-
-**Q: Нужно ли мне знать машинное обучение?**
-
-A: Нет. Библиотека спроектирована так, чтобы ей могли пользоваться трейдеры без опыта в ML. Если вы умеете загрузить данные в pandas DataFrame, вы сможете использовать dquant.
-
-**Q: Можно ли использовать dquant в реальной торговле?**
-
-A: Да, библиотека предназначена для реального использования. Модели можно сохранять и загружать.
-
-### 9.2 Вопросы по данным
-
-**Q: Какой минимальный объём данных нужен для обучения?**
-
-A: Рекомендуется не менее 10000 свечей. Чем больше данных, тем лучше модель сможет обучиться.
-
-**Q: Поддерживает ли библиотека тиковые данные?**
-
-A: Нет, библиотека работает с данными свечей (open, close, high, low,  volume)
-
-### 9.3 Вопросы по модели
-
-**Q: Почему используется градиентный бустинг, а не LSTM?**
-
-A: Градиентный бустинг показывает отличные результаты на табличных данных, быстрее обучается, требует меньше данных и более интерпретируем. LSTM может быть добавлен в будущем.
-
-**Q: Что делать, если модель переобучается?**
-
-A: Используйте график обучения, чтобы определить оптимальное число деревьев. Увеличьте `early_stopping_rounds`, добавьте регуляризацию через параметры модели. Увеличьте количество данных. Уменьшите сложность модели.
-
-**Q: Можно ли использовать модель для разных активов?**
-
-A: Рекомендуется обучать отдельную модель для каждого актива, так как у них разные характеристики.
 
 ---
 
-## 10. Внесение вклада
+## 9. Frequently Asked Questions (FAQ)
 
-### 10.1 Как сообщить об ошибке
-Если вы нашли ошибку, напишите мне в Telegram [t.me/Denchik_ai](https://t.me/Denchik_ai)
+### 9.1 General Questions
 
-### 10.2 Предложение новых функций
-Хотите предложить идею? Напишите мне в Telegram [t.me/Denchik_ai](https://t.me/Denchik_ai)
+**Q: Why should I forecast volatility?**
+
+A: Volatility is used for:
+- Risk management (stop-losses, position sizing)
+- Strategy selection (some strategies work in high volatility, others in low volatility)
+- Fair price assessment (strong movements relative to expected volatility may be signals)
+- Hedging
+
+**Q: How is DQuant different from other volatility forecasting libraries?**
+
+A: DQuant offers a unique combination:
+- Full automation — no need to think about feature engineering and data collection
+- Simplicity for beginners — one line of code for training
+- Flexibility for pros — customization of any stage
+- Specialization specifically in volatility (unlike general ML libraries)
+
+**Q: Can I use DQuant for cryptocurrencies?**
+
+A: Yes, the library works with any time series, including cryptocurrencies. Data from Binance, Bybit, and other exchanges is suitable.
+
+**Q: Do I need to know machine learning?**
+
+A: No. The library is designed so that traders without ML experience can use it. If you can load data into a pandas DataFrame, you can use DQuant.
+
+**Q: Can I use DQuant in live trading?**
+
+A: Yes, the library is intended for real-world use. Models can be saved and loaded.
+
+### 9.2 Data Questions
+
+**Q: What is the minimum amount of data needed for training?**
+
+A: At least 10,000 candles is recommended. More data allows the model to learn better.
+
+**Q: Does the library support tick data?**
+
+A: No, the library works with candle data (open, close, high, low, volume).
+
+### 9.3 Model Questions
+
+**Q: Why use gradient boosting instead of LSTM?**
+
+A: Gradient boosting performs excellently on tabular data, trains faster, requires less data, and is more interpretable. LSTM may be added in the future.
+
+**Q: What if the model overfits?**
+
+A: Use the training graph to determine the optimal number of trees. Increase `early_stopping_rounds`, add regularization via model parameters. Increase the amount of data. Reduce model complexity.
+
+**Q: Can I use the model for different assets?**
+
+A: It is recommended to train a separate model for each asset, as they have different characteristics.
 
 ---
 
-## 11. Лицензия
+## 10. Contributing
+
+### 10.1 How to Report a Bug
+
+If you find a bug, write to me on Telegram [t.me/Denchik_ai](https://t.me/Denchik_ai)
+
+### 10.2 Suggesting New Features
+
+Want to suggest an idea? Write to me on Telegram [t.me/Denchik_ai](https://t.me/Denchik_ai)
+
+---
+
+## 11. License
 
 MIT License
 
@@ -755,33 +756,33 @@ SOFTWARE.
 
 ---
 
-## 12. Благодарности
+## 12. Acknowledgments
 
-Если этот проект был вам полезен, поставьте звезду на репозиторий — это очень мотивирует!
-
----
-
-## 13. История изменений
-
-### Версия 1.0.0 (12-03-2026)
-- Первый публичный релиз
-- Базовая функциональность: классы VolClustGB, VolClustXGB, VolClustLightGBM, автоматический фичеинжиниринг, обучение XGBoost/LightGBM
-- Визуализация процесса обучения
-- Сохранение и загрузка моделей
-- Поддержка кастомных признаков
-- Документация
-
-### Версия 1.1.0 (27-03-2026)
-- Самостоятельный выбор признаков для обучения
-- Экспорт обученных моделей в индикатор для Meta Trader 5
-- Более удобный и понятный синтаксис
-
-### Версия 1.1.1 (27-03-2026)
-- Исправлена ошибка в Readme файле
-
-### Версия 1.1.2 (27-03-2026)
-- Исправлена ошибка при расчете признаков
+If this project was useful to you, star the repository — it's very motivating!
 
 ---
 
-*Документация будет дополняться по мере развития библиотеки. Если у вас есть вопросы или предложения, напишите мне в Telegram [t.me/Denchik_ai](https://t.me/Denchik_ai) .*
+## 13. Changelog
+
+### Version 1.0.0 (2026-03-12)
+- First public release
+- Basic functionality: VolClustGB, VolClustXGB, VolClustLightGBM classes, automated feature engineering, XGBoost/LightGBM training
+- Training process visualization
+- Save and load models
+- Custom feature support
+- Documentation
+
+### Version 1.1.0 (2026-03-27)
+- Independent feature selection for training
+- Export trained models to Meta Trader 5 indicator
+- More convenient and intuitive syntax
+
+### Version 1.1.1 (2026-03-27)
+- Fixed error in Readme file
+
+### Version 1.1.2 (2026-03-27)
+- Fixed error in feature calculation
+
+---
+
+*Documentation will be supplemented as the library develops. If you have questions or suggestions, write to me on Telegram [t.me/Denchik_ai](https://t.me/Denchik_ai).*

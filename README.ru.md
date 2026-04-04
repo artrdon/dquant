@@ -1,17 +1,17 @@
 <div align="center">
-  <h1>dquant</h1>
+  <h1>DQuant</h1>
   <p><strong>Автоматическое прогнозирование волатильности для трейдеров и аналитиков</strong></p>
   <br>
-  <img src="https://github.com/artrdon/dquant/blob/main/logo.png?raw=true" alt="dquant demo" width="200">
+  <img src="logo.png" alt="dquant demo" width="200">
   <br>
-  <p><i>Прогноз волатильности с помощью dquant</i></p>
+  <p><i>Прогноз волатильности с помощью DQuant</i></p>
 </div>
 
 ---
 
 ## О проекте
 
-**dquant** — это Python-библиотека с открытым исходным кодом для автоматического прогнозирования волатильности финансовых временных рядов. Она берёт на себя все этапы построения модели: от сырых цен до готового прогноза.
+**DQuant** — это Python-библиотека с открытым исходным кодом для автоматического прогнозирования волатильности финансовых временных рядов. Она берёт на себя все этапы построения модели: от сырых цен до готового прогноза.
 
 ### Ключевая идея
 > **Трейдеру не нужно знать машинное обучение, чтобы использовать ИИ для прогнозирования волатильности.**
@@ -107,7 +107,7 @@ rez = model.forecast(df.iloc[-70:].copy(), show=True)
  0.0009813 0.0007931 0.0012909 0.0013664 0.0016466 0.0014836 0.0011577
  0.0008737 0.0007213 0.0008084 0.0012699 0.0015358 0.0014748]
 ```
-<img src="https://github.com/artrdon/dquant/blob/main/readmeforecast.png?raw=true">
+<img src="readmeforecast.png">
 
 Красным показана волатильность за предыдущие свечи, а зеленым - будущая волатильность.
 
@@ -159,7 +159,6 @@ features = [
 ]
 model.fit(df, feature_list=features, input_bars=70, horizon=20, trees_count=200, show_results=True)
 
-
 # 4. Делаем прогноз
 rez = model.forecast(df.iloc[-70:].copy(), show=True)
 ```
@@ -205,7 +204,6 @@ if rates is None or len(rates) == 0:
 df = pd.DataFrame(rates)
 df['time'] = pd.to_datetime(df['time'], unit='s')
 
-
 df.rename(columns={
     'tick_volume': 'volume'
 }, inplace=True)
@@ -240,9 +238,36 @@ model.save('indicator_name', type_to_save='mql5')
 
 ---
 
+## Как внести вклад
+
+Мы приветствуем любой вклад в проект! Вот несколько способов помочь:
+
+### Сообщить об ошибке
+Нашли баг? [Создайте Issue](https://github.com/artrdon/dquant/issues) с подробным описанием:
+- Что делали
+- Что ожидали
+- Что произошло на самом деле
+- Код для воспроизведения (если возможно)
+
+### Предложить идею
+Есть идея по улучшению? [Напишите в Telegram](https://t.me/Denchik_ai) или создайте Issue с меткой `enhancement`.
+
+
+---
+
 ## Лицензия
 
 Проект распространяется под лицензией MIT. Подробнее в файле [LICENSE](https://github.com/artrdon/dquant/blob/main/LICENSE).
+
+---
+
+## Поддержка проекта
+
+Если **DQuant** помог вам в работе или учёбе:
+
+- Поставьте звезду на GitHub ⭐ — это очень мотивирует!
+- Расскажите о библиотеке коллегам
+- [Напишите мне](https://t.me/Denchik_ai) о вашем опыте использования
 
 ---
 
@@ -253,6 +278,4 @@ model.save('indicator_name', type_to_save='mql5')
 - Telegram: [@Denchik_ai](https://t.me/Denchik_ai)
 - GitHub: [@artrdon](https://github.com/artrdon)
 - Сайт проекта: [dquant.space](https://dquant.space)
-
----
 

@@ -9,7 +9,7 @@ authors = [
   { name="Denis Makarov" },
 ]
 description = "dquant — это Python-библиотека с открытым исходным кодом для автоматического прогнозирования волатильности финансовых временных рядов. Она берёт на себя все этапы построения модели: от сырых цен до готового прогноза."
-readme = "pyplreadme.md"
+readme = "README.md"
 requires-python = ">=3.7"
 classifiers = [
     "Programming Language :: Python :: 3",

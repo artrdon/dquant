@@ -1,47 +1,47 @@
 <div align="center">
-  <h1>dquant</h1>
-  <p><strong>Автоматическое прогнозирование волатильности для трейдеров и аналитиков</strong></p>
+  <h1>DQuant</h1>
+  <p><strong>Automated Volatility Forecasting for Traders and Analysts</strong></p>
   <br>
-  <img src="logo.png" alt="dquant demo" width="200">
+  <img src="https://github.com/artrdon/dquant/blob/main/logo.png?raw=true" alt="dquant demo" width="200">
   <br>
-  <p><i>Прогноз волатильности с помощью dquant</i></p>
+  <p><i>Volatility forecast with DQuant</i></p>
 </div>
 
 ---
 
-## О проекте
+## About the Project
 
-**dquant** — это Python-библиотека с открытым исходным кодом для автоматического прогнозирования волатильности финансовых временных рядов. Она берёт на себя все этапы построения модели: от сырых цен до готового прогноза.
+**DQuant** is an open-source Python library for automated volatility forecasting of financial time series. It handles all stages of model building: from raw prices to ready-made forecasts.
 
-### Ключевая идея
-> **Трейдеру не нужно знать машинное обучение, чтобы использовать ИИ для прогнозирования волатильности.**
+### Key Idea
+> **A trader doesn't need to know machine learning to use AI for volatility forecasting.**
 
-### Возможности
+### Features
 
 | | |
 |---|---|
-| **Автоматический feature engineering** | Из сырых цен (open, high, low, close, volume) создаются десятки признаков |
-| **Целевая переменная без look-ahead bias** | Корректный расчёт реализованной волатильности |
-| **3 модели на выбор** | Градиентный бустинг, XGBoost, LightGBM с ранней остановкой |
-| **Визуализация обучения** | График ошибок на train/validation для контроля переобучения |
-| **Сохранение и загрузка** | Обучил один раз — используй всегда |
-| **Гибкая кастомизация** | Свои признаки, параметры модели, источники данных |
-| **Интеграция с любыми данными** | Yahoo Finance, MetaTrader 5 |
+| **Automated feature engineering** | Creates dozens of features from raw prices (open, high, low, close, volume) |
+| **Target variable without look-ahead bias** | Correct calculation of realized volatility |
+| **3 models to choose from** | Gradient Boosting, XGBoost, LightGBM with early stopping |
+| **Training visualization** | Error plot on train/validation to monitor overfitting |
+| **Save and load** | Train once — use forever |
+| **Flexible customization** | Your own features, model parameters, data sources |
+| **Integration with any data** | Yahoo Finance, MetaTrader 5 |
 
-### Для кого это
+### Who is this for
 
-- **Алгоритмические трейдеры** — для калибровки моделей и управления рисками
-- **Дискреционные трейдеры** — для оценки рыночного режима и размера позиции
-- **Количественные аналитики** — для быстрого прототипирования
-- **Разработчики** — для встраивания в торговые системы
-- **Студенты** — как готовый бенчмарк и учебный пример
+- **Algorithmic traders** — for model calibration and risk management
+- **Discretionary traders** — for assessing market regime and position sizing
+- **Quantitative analysts** — for rapid prototyping
+- **Developers** — for embedding into trading systems
+- **Students** — as a ready-made benchmark and learning example
 
 ---
 
-## Установка
+## Installation
 
-### Требования
-- Python 3.7 или выше
+### Requirements
+- Python 3.7 or higher
 - pip
 
 
@@ -50,18 +50,18 @@ pip install dquant
 ```
 
 
-### Проверка установки
+### Verify Installation
 
 ```python
 import dquant
-print(dquant.__version__)  # Должно вывести версию
+print(dquant.__version__)  # Should output the version
 ```
 
 ---
 
-## Быстрый старт
+## Quick Start
 
-### Минимальный рабочий пример с Bitcoin
+### Minimal working example with Bitcoin
 
 ```python
 import pandas as pd
@@ -69,7 +69,7 @@ import yfinance as yf
 from dquant.models import VolClustXGB 
 
 
-# 1. Загружаем данные
+# 1. Load data
 df = yf.download("BTC-USD", start="2020-01-01", interval='1d')
 df = pd.DataFrame({
     'open': df[('Open', 'BTC-USD')].values,
@@ -79,10 +79,10 @@ df = pd.DataFrame({
     'volume': df[('Volume', 'BTC-USD')].values
 }, index=df.index)
 
-# 2. Создаем модель
+# 2. Create model
 model = VolClustXGB({}, early_stopping=True)
 
-# 3. Обучаем модель
+# 3. Train model
 features = [
     'TR',
     'returns',
@@ -95,37 +95,35 @@ features = [
 ]
 model.fit(df, feature_list=features, input_bars=70, horizon=20, trees_count=200, show_results=True)
 
-# 4. Делаем прогноз
+# 4. Make forecast
 rez = model.forecast(df.iloc[-70:].copy(), show=True)
 
 ```
 
-### Результат выполнения
+### Execution result
 
 ```
 [0.0016554 0.0018979 0.0015921 0.0014239 0.0013767 0.0011586 0.0013139
  0.0009813 0.0007931 0.0012909 0.0013664 0.0016466 0.0014836 0.0011577
  0.0008737 0.0007213 0.0008084 0.0012699 0.0015358 0.0014748]
 ```
-<img src="readmeforecast.png">
+<img src="https://github.com/artrdon/dquant/blob/main/readmeforecast.png?raw=true">
 
-Красным показана волатильность за предыдущие свечи, а зеленым - будущая волатильность.
+Red shows volatility for previous candles, green shows future volatility.
 
 ---
 
-## Документация
+## Documentation
 
-| Ресурс | Описание |
+| Resource | Description |
 |:-------|:---------|
-| [**Полная документация**](https://github.com/artrdon/dquant/blob/main/docs.md) | Все классы, методы, параметры |
-
-
+| [**Full documentation**](https://github.com/artrdon/dquant/blob/main/docs.md) | All classes, methods, parameters |
 
 ---
 
-## Примеры использования
+## Usage Examples
 
-### С Yahoo Finance
+### With Yahoo Finance
 
 ```python
 import pandas as pd
@@ -133,7 +131,7 @@ import yfinance as yf
 from dquant.models import VolClustXGB 
 
 
-# 1. Загружаем данные
+# 1. Load data
 df = yf.download("BTC-USD", start="2020-01-01", interval='1d')
 df = pd.DataFrame({
     'open': df[('Open', 'BTC-USD')].values,
@@ -143,10 +141,10 @@ df = pd.DataFrame({
     'volume': df[('Volume', 'BTC-USD')].values
 }, index=df.index)
 
-# 2. Создаем модель
+# 2. Create model
 model = VolClustXGB({}, early_stopping=True)
 
-# 3. Обучаем модель
+# 3. Train model
 features = [
     'TR',
     'returns',
@@ -159,11 +157,11 @@ features = [
 ]
 model.fit(df, feature_list=features, input_bars=70, horizon=20, trees_count=200, show_results=True)
 
-# 4. Делаем прогноз
+# 4. Make forecast
 rez = model.forecast(df.iloc[-70:].copy(), show=True)
 ```
 
-### С MetaTrader 5
+### With MetaTrader 5
 
 ```python
 import pandas as pd
@@ -172,35 +170,35 @@ import datetime as dt
 from dquant.models import VolClustXGB 
 
 
-symbol = "EURUSD"          # какой символ смотреть
-timeframe = mt5.TIMEFRAME_H1   # M1, M5, M15, H1, D1 и т.д.
-days_back = 1000             # сколько дней истории загрузить
+symbol = "EURUSD"          # symbol to watch
+timeframe = mt5.TIMEFRAME_H1   # M1, M5, M15, H1, D1, etc.
+days_back = 1000             # how many days of history to load
 
-# Подключаемся к MT5
+# Connect to MT5
 if not mt5.initialize():
-    print("Не удалось подключиться к MetaTrader5")
+    print("Failed to connect to MetaTrader5")
     quit()
 
-# Проверяем, что символ доступен
+# Check that symbol is available
 if not mt5.symbol_select(symbol, True):
-    print(f"Символ {symbol} не найден или не включён")
+    print(f"Symbol {symbol} not found or not enabled")
     mt5.shutdown()
     quit()
 
-# Вычисляем даты
+# Calculate dates
 to_date = dt.datetime.now() + dt.timedelta(hours=3)
 from_date = to_date - dt.timedelta(days=days_back)
 
-# Загружаем бары
+# Load bars
 rates = mt5.copy_rates_range(symbol, timeframe, from_date, to_date)
 
-mt5.shutdown()  # больше не нужен терминал
+mt5.shutdown()  # terminal no longer needed
 
 if rates is None or len(rates) == 0:
-    print("Нет данных!")
+    print("No data!")
     quit()
 
-# Превращаем в DataFrame
+# Convert to DataFrame
 df = pd.DataFrame(rates)
 df['time'] = pd.to_datetime(df['time'], unit='s')
 
@@ -208,10 +206,10 @@ df.rename(columns={
     'tick_volume': 'volume'
 }, inplace=True)
 
-# Создаем модель
+# Create model
 model = VolClustXGB({}, early_stopping=True)
 
-# Обучаем модель
+# Train model
 features = [
     'TR',
     'returns',
@@ -224,68 +222,56 @@ features = [
 ]
 model.fit(df, feature_list=features, input_bars=70, horizon=20, trees_count=200, show_results=True)
 
-# Делаем прогноз
+# Make forecast
 rez = model.forecast(df.iloc[-70:].copy(), show=True)
 ```
 ---
-## Создание индикатора для Meta Trader 5
+## Creating an indicator for Meta Trader 5
 
-Сразу после обучения модели её можно экспортировать в рабочий индикатор на mql5. Нужна еще одна строка кода:
+Immediately after training the model, you can export it to a working mql5 indicator. Just one more line of code is needed:
 ```python
 model.save('indicator_name', type_to_save='mql5')
 ```
-Готово! Теперь вы можете использовать ваши обученные модели в Meta Trader 5.
+Done! Now you can use your trained models in Meta Trader 5.
 
 ---
 
-## Как внести вклад
+## How to Contribute
 
-Мы приветствуем любой вклад в проект! Вот несколько способов помочь:
+We welcome any contribution to the project! Here are a few ways to help:
 
-### Сообщить об ошибке
-Нашли баг? [Создайте Issue](https://github.com/artrdon/dquant/issues) с подробным описанием:
-- Что делали
-- Что ожидали
-- Что произошло на самом деле
-- Код для воспроизведения (если возможно)
+### Report a bug
+Found a bug? [Create an Issue](https://github.com/artrdon/dquant/issues) with a detailed description:
+- What you did
+- What you expected
+- What actually happened
+- Code to reproduce (if possible)
 
-### Предложить идею
-Есть идея по улучшению? [Напишите в Telegram](https://t.me/Denchik_ai) или создайте Issue с меткой `enhancement`.
-
-
----
-
-## Лицензия
-
-Проект распространяется под лицензией MIT. Подробнее в файле [LICENSE](https://github.com/artrdon/dquant/blob/main/LICENSE).
+### Suggest an idea
+Have an idea for improvement? [Write to Telegram](https://t.me/Denchik_ai) or create an Issue with the `enhancement` label.
 
 ---
 
-## Поддержка проекта
+## License
 
-Если **dquant** помог вам в работе или учёбе:
-
-- Поставьте звезду на GitHub ⭐ — это очень мотивирует!
-- Расскажите о библиотеке коллегам
-- [Напишите мне](https://t.me/Denchik_ai) о вашем опыте использования
+The project is distributed under the MIT license. See the [LICENSE](https://github.com/artrdon/dquant/blob/main/LICENSE) file for details.
 
 ---
 
-## Контакты
+## Project Support
 
-**Автор:** Денис Макаров
+If **dquant** has helped you in your work or studies:
+
+- Star the project on GitHub ⭐ — it's very motivating!
+- Tell your colleagues about the library
+- [Write to me](https://t.me/Denchik_ai) about your experience using it
+
+---
+
+## Contacts
+
+**Author:** Denis Makarov
 
 - Telegram: [@Denchik_ai](https://t.me/Denchik_ai)
 - GitHub: [@artrdon](https://github.com/artrdon)
-- Сайт проекта: [dquant.space](https://dquant.space)
-
----
-
-<div align="center">
-  <sub>
-    Сделано с ❤️ для трейдеров и аналитиков
-    <br>
-    Если проект полезен — поставьте звезду!
-  </sub>
-</div>
-
+- Project website: [dquant.space](https://dquant.space)

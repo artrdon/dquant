@@ -459,6 +459,8 @@ class FichEn:
         print('model is trained')
         self.is_fitted = True
 
+        return self.train_errors, self.val_errors
+
     def forecast(self, latest_data, feature_func=None, show=False):
         if feature_func == None:
             X = self._prepare_single_window_features(latest_data, self.feature_list)
