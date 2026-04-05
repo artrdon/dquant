@@ -1,4 +1,3 @@
-
 ## 5. User Guide
 
 ### 5.1 VolClustGB, VolClustXGB, VolClustLightGBM Classes

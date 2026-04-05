@@ -45,20 +45,17 @@
    - 6.1 [Customizing Feature Engineering](#61-customizing-feature-engineering)
      - 6.1.1 [Passing a Custom Function](#611-passing-a-custom-function)
    - 6.2 [Model Hyperparameter Tuning](#62-model-hyperparameter-tuning)
-7. [API Reference](#7-api-reference)
-   - 7.1 [DQuant Module](#71-DQuant-module)
-8. [Usage Examples](#8-usage-examples)
-   - 8.1 [Bitcoin Volatility Forecast](#81-bitcoin-volatility-forecast)
-9. [Frequently Asked Questions (FAQ)](#9-frequently-asked-questions-faq)
-   - 9.1 [General Questions](#91-general-questions)
-   - 9.2 [Data Questions](#92-data-questions)
-   - 9.3 [Model Questions](#93-model-questions)
-10. [Contributing](#10-contributing)
-    - 10.1 [How to Report a Bug](#101-how-to-report-a-bug)
-    - 10.2 [Suggesting New Features](#102-suggesting-new-features)
-11. [License](#11-license)
-12. [Acknowledgments](#12-acknowledgments)
-13. [Changelog](#13-changelog)
+7. [Usage Examples](#7-usage-examples)
+   - 7.1 [Bitcoin Volatility Forecast](#71-bitcoin-volatility-forecast)
+8. [Frequently Asked Questions (FAQ)](#8-frequently-asked-questions-faq)
+   - 8.1 [General Questions](#81-general-questions)
+   - 8.2 [Data Questions](#82-data-questions)
+   - 8.3 [Model Questions](#83-model-questions)
+9. [Contributing](#9-contributing)
+    - 9.1 [How to Report a Bug](#91-how-to-report-a-bug)
+    - 9.2 [Suggesting New Features](#92-suggesting-new-features)
+10. [License](#10-license)
+11. [Changelog](#13-changelog)
 
 ---
 
@@ -355,6 +352,15 @@ When saving, the following are preserved:
 
 ### 5.1 VolClustGB, VolClustXGB, VolClustLightGBM Classes
 
+
+
+| Object | Description |
+|:-------------------|:---|
+| `__version__` | Library version |
+| `VolClustGB` | Class for volatility forecasting using Gradient Boosting |
+| `VolClustXGB` | Class for volatility forecasting using XGBoost |
+| `VolClustLightGBM` | Class for volatility forecasting using LightGBM |
+
 #### 5.1.1 Initialization Parameters
 
 | Parameter | Type | Default | Description |
@@ -605,22 +611,9 @@ The library uses GradientBoostingRegressor, XGBRegressor, and LGBMRegressor mode
 
 ---
 
-## 7. API Reference
+## 7. Usage Examples
 
-### 7.1 DQuant Module
-
-| Object | Description |
-|:-------------------|:---|
-| `__version__` | Library version |
-| `VolClustGB` | Class for volatility forecasting using Gradient Boosting |
-| `VolClustXGB` | Class for volatility forecasting using XGBoost |
-| `VolClustLightGBM` | Class for volatility forecasting using LightGBM |
-
----
-
-## 8. Usage Examples
-
-### 8.1 Bitcoin Volatility Forecast
+### 7.1 Bitcoin Volatility Forecast
 
 ```python
 import pandas as pd
@@ -660,9 +653,9 @@ rez = model.forecast(df.iloc[-70:].copy(), show=True)
 
 ---
 
-## 9. Frequently Asked Questions (FAQ)
+## 8. Frequently Asked Questions (FAQ)
 
-### 9.1 General Questions
+### 8.1 General Questions
 
 **Q: Why should I forecast volatility?**
 
@@ -692,7 +685,7 @@ A: No. The library is designed so that traders without ML experience can use it.
 
 A: Yes, the library is intended for real-world use. Models can be saved and loaded.
 
-### 9.2 Data Questions
+### 8.2 Data Questions
 
 **Q: What is the minimum amount of data needed for training?**
 
@@ -702,12 +695,7 @@ A: At least 10,000 candles is recommended. More data allows the model to learn b
 
 A: No, the library works with candle data (open, close, high, low, volume).
 
-### 9.3 Model Questions
-
-**Q: Why use gradient boosting instead of LSTM?**
-
-A: Gradient boosting performs excellently on tabular data, trains faster, requires less data, and is more interpretable. LSTM may be added in the future.
-
+### 8.3 Model Questions
 **Q: What if the model overfits?**
 
 A: Use the training graph to determine the optimal number of trees. Increase `early_stopping_rounds`, add regularization via model parameters. Increase the amount of data. Reduce model complexity.
@@ -718,19 +706,19 @@ A: It is recommended to train a separate model for each asset, as they have diff
 
 ---
 
-## 10. Contributing
+## 9. Contributing
 
-### 10.1 How to Report a Bug
+### 9.1 How to Report a Bug
 
 If you find a bug, write to me on Telegram [t.me/Denchik_ai](https://t.me/Denchik_ai)
 
-### 10.2 Suggesting New Features
+### 9.2 Suggesting New Features
 
 Want to suggest an idea? Write to me on Telegram [t.me/Denchik_ai](https://t.me/Denchik_ai)
 
 ---
 
-## 11. License
+## 10. License
 
 MIT License
 
@@ -756,13 +744,7 @@ SOFTWARE.
 
 ---
 
-## 12. Acknowledgments
-
-If this project was useful to you, star the repository — it's very motivating!
-
----
-
-## 13. Changelog
+## 10. Changelog
 
 ### Version 1.0.0 (2026-03-12)
 - First public release
@@ -783,6 +765,3 @@ If this project was useful to you, star the repository — it's very motivating!
 ### Version 1.1.2 (2026-03-27)
 - Fixed error in feature calculation
 
----
-
-*Documentation will be supplemented as the library develops. If you have questions or suggestions, write to me on Telegram [t.me/Denchik_ai](https://t.me/Denchik_ai).*

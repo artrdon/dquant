@@ -91,7 +91,6 @@ rez = model.forecast(df.iloc[-70:].copy(), show=True)
 Pass the last 70 candles, get volatility forecast for the next 20 days.
 
 The volatility forecast will be displayed as a graph.
-<img src="readmeforecast.png">
+<img src="https://github.com/artrdon/dquant/blob/main/readmeforecast.png?raw=true">
 Red shows volatility for previous candles, green shows future volatility.
 
----

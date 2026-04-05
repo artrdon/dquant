@@ -1,4 +1,3 @@
-
 ## 2. Installation
 
 ### 2.1 Requirements
@@ -34,5 +33,3 @@ import dquant
 print(dquant.__version__)
 # Should output the version
 ```
-
----

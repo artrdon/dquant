@@ -1,4 +1,3 @@
-
 ## 4. Core Concepts
 
 ### 4.1 Input Data
@@ -110,5 +109,3 @@ model.load("btc_vol_model")
 When saving, the following are preserved:
 - Models
 - Feature normalization parameters
-
----

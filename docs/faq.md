@@ -48,5 +48,3 @@ A: Use the training graph to determine the optimal number of trees. Increase `ea
 **Q: Can I use the model for different assets?**
 
 A: It is recommended to train a separate model for each asset, as they have different characteristics.
-
----

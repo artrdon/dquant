@@ -1,4 +1,3 @@
-
 ## 1. Introduction
 
 ### 1.1 What is DQuant?
@@ -35,5 +34,3 @@ DQuant is built on three principles:
 1. **Simplicity for beginners** — you don't need to be a data scientist to use the library.
 2. **Power for professionals** — flexible customization for those who want to dig deeper.
 3. **Transparency** — you always see what's happening (graphs, metrics) and can interpret the results.
-
----

@@ -31,7 +31,6 @@ nav:
   - License: license.md
   - Changelog: changelog.md
 
-# Временно закомментируйте markdown_extensions
 # markdown_extensions:
 #   - tables
 #   - fenced_code

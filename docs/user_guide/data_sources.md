@@ -1,4 +1,3 @@
-
 ### 5.2 Working with Different Data Sources
 
 #### 5.2.1 Yahoo Finance

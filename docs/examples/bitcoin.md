@@ -37,5 +37,3 @@ model.fit(df, feature_list=features, input_bars=70, horizon=20, trees_count=200,
 # 4. Make forecast
 rez = model.forecast(df.iloc[-70:].copy(), show=True)
 ```
-
----
