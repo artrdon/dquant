@@ -31,15 +31,16 @@ nav:
   - License: license.md
   - Changelog: changelog.md
 
-markdown_extensions:
-  - tables
-  - fenced_code
-  - codehilite
-  - toc:
-      permalink: true
-  - admonition
-  - pymdownx.highlight
-  - pymdownx.superfences
+# Временно закомментируйте markdown_extensions
+# markdown_extensions:
+#   - tables
+#   - fenced_code
+#   - codehilite
+#   - toc:
+#       permalink: true
+#   - admonition
+#   - pymdownx.highlight
+#   - pymdownx.superfences
 
 docs_dir: docs
 site_dir: site
