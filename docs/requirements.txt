@@ -1,0 +1,2 @@
+mkdocs>=1.5.0
+mkdocs-readthedocs-theme>=1.0.0
