@@ -1,0 +1,45 @@
+site_name: DQuant Library
+site_description: Automated volatility forecasting for financial time series using machine learning
+site_url: https://dquant.readthedocs.io/
+repo_url: https://github.com/artrdon/dquant
+repo_name: artrdon/dquant
+copyright: Copyright &copy; 2026 Denis Makarov
+
+theme:
+  name: readthedocs
+  highlightjs: true
+  features:
+    - navigation.tabs
+    - navigation.sections
+
+nav:
+  - Home: index.md
+  - Introduction: introduction.md
+  - Installation: installation.md
+  - Quick Start: quick_start.md
+  - Core Concepts: core_concepts.md
+  - User Guide:
+    - API Reference: user_guide/api.md
+    - Data Sources: user_guide/data_sources.md
+    - Interpreting Results: user_guide/interpreting.md
+  - Advanced Usage:
+    - Custom Features: advanced/custom_features.md
+    - Hyperparameter Tuning: advanced/hyperparameters.md
+  - Examples: examples/bitcoin.md
+  - FAQ: faq.md
+  - Contributing: contributing.md
+  - License: license.md
+  - Changelog: changelog.md
+
+markdown_extensions:
+  - tables
+  - fenced_code
+  - codehilite
+  - toc:
+      permalink: true
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+
+docs_dir: docs
+site_dir: site
