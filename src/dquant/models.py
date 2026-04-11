@@ -11,7 +11,7 @@ import numpy as np
 import xgboost
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.preprocessing import StandardScaler
 from typing import Tuple
 import pandas as pd
@@ -392,14 +392,17 @@ class FichEn:
 
         self.train_errors = []
         self.val_errors = []
+        self.train_r2 = []
+        self.val_r2 = []
         trees = 1
         start = time.time()
         try:
             for i in range(trees, trees_count+1):
                 print(f'{i} trees')
-                trees = i
                 t_error = 0
                 v_error = 0
+                t_r2 = 0
+                v_r2 = 0
                 if isinstance(horizon, int):
                     horizon_list = list(range(horizon))
                 else:
@@ -434,19 +437,25 @@ class FichEn:
                         if i != 1:
                             t_error += mean_squared_error(y_h_clean, self.models[h_idx].predict(X_h))
                             v_error += mean_squared_error(y_h_v_clean, self.models[h_idx].predict(X_h_v))
+                            t_r2 += r2_score(y_h_clean, self.models[h_idx].predict(X_h))
+                            v_r2 += r2_score(y_h_v_clean, self.models[h_idx].predict(X_h_v))
                         else:
                             t_error += mean_squared_error(y_h_clean, model.predict(X_h))
                             v_error += mean_squared_error(y_h_v_clean, model.predict(X_h_v))
+                            t_r2 += r2_score(y_h_clean, model.predict(X_h))
+                            v_r2 += r2_score(y_h_v_clean, model.predict(X_h_v))
 
 
                 var_test_error = float(t_error)/horizon
                 var_val_error = float(v_error)/horizon
+                var_test_r2 = float(t_r2)/horizon
+                var_val_r2 = float(v_r2)/horizon
 
                 if self.early_stopping:
                     if previous_error_was_grow:
                         print(f'training stopped by early stopping on {i} trees')
                         if show_results:
-                            self.V.show_errors(self.train_errors, self.val_errors)
+                            self.V.show_errors(self.train_errors, self.val_errors, self.train_r2, self.val_r2)
                         self.is_fitted = True
                         return
                     else:
@@ -457,15 +466,19 @@ class FichEn:
 
                 self.train_errors.append(var_test_error)
                 self.val_errors.append(var_val_error)
+                self.train_r2.append(var_test_r2)
+                self.val_r2.append(var_val_r2)
                 print('Train error:      ', var_test_error)
                 print('Validation error: ', var_val_error)
+                print('Train r2:         ', var_test_r2)
+                print('Validation r2:    ', var_val_r2)
                 print(f"Затрачено времени: {time.time() - start} сек")
 
         except KeyboardInterrupt:
             print("\nОбучение прервано по Ctrl+C!")
 
         if show_results:
-            self.V.show_errors(self.train_errors, self.val_errors)
+            self.V.show_errors(self.train_errors, self.val_errors, self.train_r2, self.val_r2)
 
         print('model is trained')
         self.is_fitted = True
