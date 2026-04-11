@@ -537,7 +537,7 @@ class FichEn:
                 X = X.reshape(1, -1)
             X_scaled = self.scaler.transform(X)
 
-            predictions = []
+            predictions = [] #jj
             for model in self.models:
                 pred = model.predict(X_scaled)
                 if len(pred.shape) > 0 and pred.shape[0] > 1:
