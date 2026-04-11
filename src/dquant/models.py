@@ -338,6 +338,15 @@ class FichEn:
         x, y = self._DataSplitting(data, input_bars, horizon, True)
         XX = []
         YY = []
+        self.input_bars = input_bars
+        self.horizon = horizon
+        self.trees_count = trees_count
+        self.meta = {
+            "input_bars": self.input_bars,
+            "horizon": self.horizon,
+            "trees_count": self.trees_count
+        }
+
         lx = len(x)
         self.feature_list = feature_list
         if len(x) != len(y): raise "pizdec"
@@ -373,6 +382,8 @@ class FichEn:
         X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2, shuffle=False, random_state=42)
         X_scaled = self.scaler.fit_transform(X_train)
         X_test_scaled = self.scaler.transform(X_test)
+        Y_scaled = self.scaler_y.fit_transform(y_train)
+        Y_test_scaled = self.scaler_y.transform(y_test)
         self.X_shape = X_scaled.shape[1]
 
         # early stopping variables
@@ -394,13 +405,13 @@ class FichEn:
                 else:
                     horizon_list = horizon
 
-                if len(y_train.shape) == 2 and y_train.shape[1] > 1:
+                if len(Y_scaled.shape) == 2 and Y_scaled.shape[1] > 1:
                     for h_idx, h in enumerate(horizon_list):
-                        if h_idx >= y_train.shape[1]:
+                        if h_idx >= Y_scaled.shape[1]:
                             print(f"Предупреждение: горизонт {h} выходит за пределы y, пропускаем")
                             continue
 
-                        y_h = y_train.iloc[:, h_idx] if hasattr(y_train, 'iloc') else y_train[:, h_idx]
+                        y_h = Y_scaled.iloc[:, h_idx] if hasattr(Y_scaled, 'iloc') else Y_scaled[:, h_idx]
 
                         valid_mask = ~pd.isna(y_h) if hasattr(y_h, 'isna') else ~np.isnan(y_h)
                         X_h = X_scaled[valid_mask]
@@ -415,7 +426,7 @@ class FichEn:
                             model.fit(X_h, y_h_clean)
                             self.models.append(model)
 
-                        y_h_v = y_test.iloc[:, h_idx] if hasattr(y_test, 'iloc') else y_test[:, h_idx]
+                        y_h_v = Y_test_scaled.iloc[:, h_idx] if hasattr(Y_test_scaled, 'iloc') else Y_test_scaled[:, h_idx]
 
                         valid_mask = ~pd.isna(y_h_v) if hasattr(y_h_v, 'isna') else ~np.isnan(y_h_v)
                         X_h_v = X_test_scaled[valid_mask]
@@ -485,6 +496,24 @@ class FichEn:
                 pred = session.run(None, {input_name: X_float32})
                 predictions.append(float(f'{pred[0][0][0]:.7f}'))
 
+            pred_array = np.array(predictions)
+
+            # ИСПРАВЛЕНИЕ ЗДЕСЬ:
+            if pred_array.ndim == 1:
+                # Для одного сэмпла с 30 таргетами: (30,) -> (1, 30)
+                pred_array = pred_array.reshape(1, -1)
+            elif pred_array.ndim == 2:
+                if pred_array.shape[0] == 1 and pred_array.shape[1] == 30:
+                    # Уже правильно (1, 30) - ничего не делаем
+                    pass
+                elif pred_array.shape[0] == 30 and pred_array.shape[1] == 1:
+                    # Неправильная форма (30, 1) -> (1, 30)
+                    pred_array = pred_array.T
+                elif pred_array.shape[0] > 1 and pred_array.shape[1] == 30:
+                    # Несколько моделей: (n_models, 30) - берем первую или усредняем
+                    pred_array = pred_array[0:1, :]  # Берем первую модель
+            predictions = self.scaler_y.inverse_transform(pred_array).flatten()
+
             if show:
                 epsilon = 1e-10
                 close_price = latest_data['close'].values
@@ -515,6 +544,24 @@ class FichEn:
                     predictions.append(pred)
                 else:
                     predictions.append(pred[0] if len(pred.shape) > 0 else pred)
+
+            pred_array = np.array(predictions)
+
+            # ИСПРАВЛЕНИЕ ЗДЕСЬ:
+            if pred_array.ndim == 1:
+                # Для одного сэмпла с 30 таргетами: (30,) -> (1, 30)
+                pred_array = pred_array.reshape(1, -1)
+            elif pred_array.ndim == 2:
+                if pred_array.shape[0] == 1 and pred_array.shape[1] == 30:
+                    # Уже правильно (1, 30) - ничего не делаем
+                    pass
+                elif pred_array.shape[0] == 30 and pred_array.shape[1] == 1:
+                    # Неправильная форма (30, 1) -> (1, 30)
+                    pred_array = pred_array.T
+                elif pred_array.shape[0] > 1 and pred_array.shape[1] == 30:
+                    # Несколько моделей: (n_models, 30) - берем первую или усредняем
+                    pred_array = pred_array[0:1, :]  # Берем первую модель
+            predictions = self.scaler_y.inverse_transform(pred_array).flatten()
 
             if show:
                 epsilon = 1e-10
@@ -733,76 +780,90 @@ class FichEn:
                     f.write('        \n')
                 elif i == 'TR':
                     f.write('        // TR (True Range)\n')
-                    f.write('        double high_low = (current.high - current.low) / divisor;\n')
-                    f.write('        double hc = MathAbs(current.high - prev.close) / divisor;\n')
-                    f.write('        double lc = MathAbs(current.low - prev.close) / divisor;\n')
-                    f.write('        TR[i] = MathMax(high_low, MathMax(hc, lc));\n')
+                    f.write('        {\n')
+                    f.write('            double high_low_tr = (current.high - current.low) / divisor;\n')
+                    f.write('            double hc = MathAbs(current.high - prev.close) / divisor;\n')
+                    f.write('            double lc = MathAbs(current.low - prev.close) / divisor;\n')
+                    f.write('            TR[i] = MathMax(high_low_tr, MathMax(hc, lc));\n')
+                    f.write('        }\n')
                     f.write('        \n')
                 elif i == 'parkinson':
                     f.write('        // parkinson\n')
+                    f.write('        {\n')
                     f.write(
-                        '        parkinson[i] = MathSqrt((1.0/(4.0*M_LN2))*MathPow(MathLog(current.high/current.low), 2));\n')
+                        '            parkinson[i] = MathSqrt((1.0/(4.0*M_LN2))*MathPow(MathLog(current.high/current.low), 2));\n')
+                    f.write('        }\n')
                     f.write('        \n')
                 elif i == 'garman_klass':
                     f.write('        // garman_klass\n')
+                    f.write('        {\n')
                     f.write(
-                        '        if(current.high > 0 && current.low > 0 && current.open > 0 && current.close > 0)\n')
-                    f.write('        {\n')
-                    f.write('            double hl = MathPow(MathLog(current.high / current.low), 2);\n')
-                    f.write('            double co = MathPow(MathLog(current.close / current.open), 2);\n')
-                    f.write('            garman_klass[i] = MathSqrt(0.5 * hl - (2.0*M_LN2-1.0)*co);\n')
-                    f.write('        }\n')
-                    f.write('        else\n')
-                    f.write('        {\n')
-                    f.write('            garman_klass[i] = 0.0;\n')
+                        '            if(current.high > 0 && current.low > 0 && current.open > 0 && current.close > 0)\n')
+                    f.write('            {\n')
+                    f.write('                double hl = MathPow(MathLog(current.high / current.low), 2);\n')
+                    f.write('                double co = MathPow(MathLog(current.close / current.open), 2);\n')
+                    f.write('                garman_klass[i] = MathSqrt(0.5 * hl - (2.0*M_LN2-1.0)*co);\n')
+                    f.write('            }\n')
+                    f.write('            else\n')
+                    f.write('            {\n')
+                    f.write('                garman_klass[i] = 0.0;\n')
+                    f.write('            }\n')
                     f.write('        }\n')
                     f.write('        \n')
                 elif i == 'rogers_satchell':
                     f.write('        // rogers_satchell\n')
+                    f.write('        {\n')
                     f.write(
-                        '        if(current.high > 0 && current.low > 0 && current.open > 0 && current.close > 0)\n')
-                    f.write('        {\n')
-                    f.write('            double h_o = MathLog(current.high / current.open);\n')
-                    f.write('            double l_o = MathLog(current.low / current.open);\n')
-                    f.write('            double c_o = MathLog(current.close / current.open);\n')
-                    f.write('            rogers_satchell[i] = MathSqrt(h_o * (h_o - c_o) + l_o * (l_o - c_o));\n')
-                    f.write('        }\n')
-                    f.write('        else\n')
-                    f.write('        {\n')
-                    f.write('            rogers_satchell[i] = 0.0;\n')
+                        '            if(current.high > 0 && current.low > 0 && current.open > 0 && current.close > 0)\n')
+                    f.write('            {\n')
+                    f.write('                double h_o = MathLog(current.high / current.open);\n')
+                    f.write('                double l_o = MathLog(current.low / current.open);\n')
+                    f.write('                double c_o = MathLog(current.close / current.open);\n')
+                    f.write('                rogers_satchell[i] = MathSqrt(h_o * (h_o - c_o) + l_o * (l_o - c_o));\n')
+                    f.write('            }\n')
+                    f.write('            else\n')
+                    f.write('            {\n')
+                    f.write('                rogers_satchell[i] = 0.0;\n')
+                    f.write('            }\n')
                     f.write('        }\n')
                     f.write('        \n')
                 elif i == 'returns':
                     f.write('        // returns (log returns)\n')
-                    f.write('        if(i > 0 && prev.close > 0 && current.close > 0) \n')
                     f.write('        {\n')
-                    f.write('            returns[i] = MathLog(current.close / prev.close);\n')
-                    f.write('        } \n')
-                    f.write('        else \n')
-                    f.write('        {\n')
-                    f.write('            returns[i] = 0.0;\n')
+                    f.write('            if(i > 0 && prev.close > 0 && current.close > 0) \n')
+                    f.write('            {\n')
+                    f.write('                returns[i] = MathLog(current.close / prev.close);\n')
+                    f.write('            } \n')
+                    f.write('            else \n')
+                    f.write('            {\n')
+                    f.write('                returns[i] = 0.0;\n')
+                    f.write('            }\n')
                     f.write('        }\n')
                     f.write('        \n')
                 elif i == 'abs_returns':
                     f.write('        // abs_returns\n')
-                    f.write('        if(i > 0 && prev.close > 0 && current.close > 0) \n')
                     f.write('        {\n')
-                    f.write('            abs_returns[i] = MathAbs(MathLog(current.close / prev.close));\n')
-                    f.write('        } \n')
-                    f.write('        else \n')
-                    f.write('        {\n')
-                    f.write('            abs_returns[i] = 0.0;\n')
+                    f.write('            if(i > 0 && prev.close > 0 && current.close > 0) \n')
+                    f.write('            {\n')
+                    f.write('                abs_returns[i] = MathAbs(MathLog(current.close / prev.close));\n')
+                    f.write('            } \n')
+                    f.write('            else \n')
+                    f.write('            {\n')
+                    f.write('                abs_returns[i] = 0.0;\n')
+                    f.write('            }\n')
                     f.write('        }\n')
                     f.write('        \n')
                 elif i == 'gap':
                     f.write('        // gap\n')
-                    f.write('        if(i > 0 && prev.close > 0) \n')
                     f.write('        {\n')
-                    f.write('            gap[i] = (current.open - prev.close) / divisor;\n')
-                    f.write('        } \n')
-                    f.write('        else \n')
-                    f.write('        {\n')
-                    f.write('            gap[i] = 0.0;\n')
+                    f.write('            if(i > 0 && prev.close > 0) \n')
+                    f.write('            {\n')
+                    f.write('                gap[i] = (current.open - prev.close) / divisor;\n')
+                    f.write('            } \n')
+                    f.write('            else \n')
+                    f.write('            {\n')
+                    f.write('                gap[i] = 0.0;\n')
+                    f.write('            }\n')
                     f.write('        }\n')
                     f.write('        \n')
                 elif i == 'body':
@@ -811,21 +872,25 @@ class FichEn:
                     f.write('        \n')
                 elif i == 'shadow':
                     f.write('        // shadow\n')
-                    f.write('        double max_open_close = MathMax(current.open, current.close);\n')
-                    f.write('        double min_open_close = MathMin(current.open, current.close);\n')
+                    f.write('        {\n')
+                    f.write('            double max_open_close = MathMax(current.open, current.close);\n')
+                    f.write('            double min_open_close = MathMin(current.open, current.close);\n')
                     f.write(
-                        '        shadow[i] = ((current.high - max_open_close) + (min_open_close - current.low)) / divisor;\n')
+                        '            shadow[i] = ((current.high - max_open_close) + (min_open_close - current.low)) / divisor;\n')
+                    f.write('        }\n')
                     f.write('        \n')
                 elif i == 'close_position':
                     f.write('        // close_position\n')
-                    f.write('        double high_low_diff = current.high - current.low;\n')
-                    f.write('        if(high_low_diff > epsilon) \n')
                     f.write('        {\n')
-                    f.write('            close_position[i] = (current.close - current.low) / high_low_diff;\n')
-                    f.write('        } \n')
-                    f.write('        else \n')
-                    f.write('        {\n')
-                    f.write('            close_position[i] = 0.5;\n')
+                    f.write('            double high_low_diff = current.high - current.low;\n')
+                    f.write('            if(high_low_diff > epsilon) \n')
+                    f.write('            {\n')
+                    f.write('                close_position[i] = (current.close - current.low) / high_low_diff;\n')
+                    f.write('            } \n')
+                    f.write('            else \n')
+                    f.write('            {\n')
+                    f.write('                close_position[i] = 0.5;\n')
+                    f.write('            }\n')
                     f.write('        }\n')
                     f.write('        \n')
                 elif i[:9] == 'roll_rsi_':
@@ -839,7 +904,7 @@ class FichEn:
                             window += i[j]
                     window = int(window)
                     f.write('        // roll_rsi\n')
-                    f.write('        \n')
+                    f.write('        {\n')
                     f.write(f'            if(i >= {window - 1})\n')
                     f.write('            {\n')
                     f.write('                double gain_sum = 0.0;\n')
@@ -866,6 +931,7 @@ class FichEn:
                     f.write('            {\n')
                     f.write(f'                roll_rsi_{window}[i] = 0.0;\n')
                     f.write('            }\n')
+                    f.write('        }\n')
                     f.write('        \n')
                 elif i[:9] == 'roll_atr_':
                     window = ''
@@ -878,6 +944,7 @@ class FichEn:
                             window += i[j]
                     window = int(window)
                     f.write('        // roll_atr\n')
+                    f.write('        {\n')
                     f.write(f'            if(i >= {window - 1})\n')
                     f.write('            {\n')
                     f.write('                double tr_sum = 0.0;\n')
@@ -892,6 +959,8 @@ class FichEn:
                     f.write('            {\n')
                     f.write(f'                roll_atr_{window}[i] = 0.0;\n')
                     f.write('            }\n')
+                    f.write('        }\n')
+                    f.write('        \n')
                 elif i[:8] == 'roll_bb_':
                     window = ''
                     for j in range(8, len(i)):
@@ -903,6 +972,7 @@ class FichEn:
                             window += i[j]
                     window = int(window)
                     f.write('        // roll_bb\n')
+                    f.write('        {\n')
                     f.write(f'            if(i >= {window - 1})\n')
                     f.write('            {\n')
                     f.write('                double sma_sum = 0.0;\n')
@@ -924,33 +994,69 @@ class FichEn:
                     f.write('            {\n')
                     f.write(f'                roll_bb_{window}[i] = 0.0;\n')
                     f.write('            }\n')
+                    f.write('        }\n')
+                    f.write('        \n')
                 elif i == 'roll_month':
-                    f.write('   TimeToStruct(iTime(_Symbol, _Period, window_size-i), timedt);\n')
-                    f.write('   roll_month[i] = timedt.mon;\n')
+                    f.write('        // roll_month\n')
+                    f.write('        {\n')
+                    f.write('            MqlDateTime timedt;\n')
+                    f.write('            TimeToStruct(iTime(_Symbol, _Period, window_size - i), timedt);\n')
+                    f.write('            roll_month[i] = timedt.mon;\n')
+                    f.write('        }\n')
+                    f.write('        \n')
                 elif i == 'roll_day_of_month':
-                    f.write('   TimeToStruct(iTime(_Symbol, _Period, window_size-i), timedt);\n')
-                    f.write('   roll_day_of_month[i] = timedt.day;\n')
+                    f.write('        // roll_day_of_month\n')
+                    f.write('        {\n')
+                    f.write('            MqlDateTime timedt;\n')
+                    f.write('            TimeToStruct(iTime(_Symbol, _Period, window_size - i), timedt);\n')
+                    f.write('            roll_day_of_month[i] = timedt.day;\n')
+                    f.write('        }\n')
+                    f.write('        \n')
                 elif i == 'roll_day_of_week':
-                    f.write('   TimeToStruct(iTime(_Symbol, _Period, window_size-i), timedt);\n')
-                    f.write('   roll_day_of_week[i] = timedt.day_of_week;\n')
+                    f.write('        // roll_day_of_week\n')
+                    f.write('        {\n')
+                    f.write('            MqlDateTime timedt;\n')
+                    f.write('            TimeToStruct(iTime(_Symbol, _Period, window_size - i), timedt);\n')
+                    f.write('            roll_day_of_week[i] = timedt.day_of_week;\n')
+                    f.write('        }\n')
+                    f.write('        \n')
                 elif i == 'roll_hour':
-                    f.write('   TimeToStruct(iTime(_Symbol, _Period, window_size-i), timedt);\n')
-                    f.write('   roll_hour[i] = timedt.hour;\n')
+                    f.write('        // roll_hour\n')
+                    f.write('        {\n')
+                    f.write('            MqlDateTime timedt;\n')
+                    f.write('            TimeToStruct(iTime(_Symbol, _Period, window_size - i), timedt);\n')
+                    f.write('            roll_hour[i] = timedt.hour;\n')
+                    f.write('        }\n')
+                    f.write('        \n')
+
             f.write('    }\n')
             f.write('    int last_idx = window_size - 1;\n')
+
             for i in self.single_features:
                 if i == 'month':
-                    f.write('   TimeToStruct(iTime(_Symbol, _Period, 1), timedt);\n')
-                    f.write('   month = timedt.mon;\n')
+                    f.write('    {\n')
+                    f.write('        MqlDateTime timedt;\n')
+                    f.write('        TimeToStruct(iTime(_Symbol, _Period, 1), timedt);\n')
+                    f.write('        month = timedt.mon;\n')
+                    f.write('    }\n')
                 elif i == 'day_of_month':
-                    f.write('   TimeToStruct(iTime(_Symbol, _Period, 1), timedt);\n')
-                    f.write('   day_of_month = timedt.day;\n')
+                    f.write('    {\n')
+                    f.write('        MqlDateTime timedt;\n')
+                    f.write('        TimeToStruct(iTime(_Symbol, _Period, 1), timedt);\n')
+                    f.write('        day_of_month = timedt.day;\n')
+                    f.write('    }\n')
                 elif i == 'day_of_week':
-                    f.write('   TimeToStruct(iTime(_Symbol, _Period, 1), timedt);\n')
-                    f.write('   day_of_week = timedt.day_of_week;\n')
+                    f.write('    {\n')
+                    f.write('        MqlDateTime timedt;\n')
+                    f.write('        TimeToStruct(iTime(_Symbol, _Period, 1), timedt);\n')
+                    f.write('        day_of_week = timedt.day_of_week;\n')
+                    f.write('    }\n')
                 elif i == 'hour':
-                    f.write('   TimeToStruct(iTime(_Symbol, _Period, 1), timedt);\n')
-                    f.write('   hour = timedt.hour;\n')
+                    f.write('    {\n')
+                    f.write('        MqlDateTime timedt;\n')
+                    f.write('        TimeToStruct(iTime(_Symbol, _Period, 1), timedt);\n')
+                    f.write('        hour = timedt.hour;\n')
+                    f.write('    }\n')
                 elif i[:4] == 'rsi_':
                     window = ''
                     for j in range(4, len(i)):
@@ -961,25 +1067,24 @@ class FichEn:
                         else:
                             window += i[j]
                     window = int(window)
-                    f.write('    \n')
-                    f.write('    double gain_sum = 0.0;\n')
-                    f.write('    double loss_sum = 0.0;\n')
-                    f.write('    \n')
-                    f.write(f'    for(int i = last_idx - {window} + 1; i <= last_idx; i++)\n')
                     f.write('    {\n')
-                    f.write('        double delta = rates_array[i].close - rates_array[i-1].close;\n')
+                    f.write('        double gain_sum = 0.0;\n')
+                    f.write('        double loss_sum = 0.0;\n')
                     f.write('        \n')
-                    f.write('        if(delta > 0)\n')
-                    f.write('            gain_sum += delta;\n')
-                    f.write('        else\n')
-                    f.write('            loss_sum += -delta;\n')
+                    f.write(f'        for(int idx = last_idx - {window} + 1; idx <= last_idx; idx++)\n')
+                    f.write('        {\n')
+                    f.write('            double delta = rates_array[idx].close - rates_array[idx-1].close;\n')
+                    f.write('            if(delta > 0)\n')
+                    f.write('                gain_sum += delta;\n')
+                    f.write('            else\n')
+                    f.write('                loss_sum += -delta;\n')
+                    f.write('        }\n')
+                    f.write('        \n')
+                    f.write(f'        double gain = gain_sum / {window};\n')
+                    f.write(f'        double loss = loss_sum / {window};\n')
+                    f.write('        double rs = gain / (loss + epsilon);\n')
+                    f.write(f'        {i} = 100.0 - (100.0 / (1.0 + rs));\n')
                     f.write('    }\n')
-                    f.write('    \n')
-                    f.write(f'    double gain = gain_sum / {window};\n')
-                    f.write(f'    double loss = loss_sum / {window};\n')
-                    f.write('    \n')
-                    f.write(f'    double rs = gain / (loss + epsilon);\n')
-                    f.write(f'    {i} = 100.0 - (100.0 / (1.0 + rs));\n')
                     f.write('    \n')
                 elif i[:4] == 'atr_':
                     window = ''
@@ -991,20 +1096,21 @@ class FichEn:
                         else:
                             window += i[j]
                     window = int(window)
-                    f.write('    double tr_sum = 0.0;\n')
-                    f.write('    \n')
-                    f.write(f'    for(int i = last_idx - {window} + 1; i <= last_idx; i++)\n')
                     f.write('    {\n')
-                    f.write('        MqlRates current = rates_array[i];\n')
-                    f.write('        MqlRates prev = rates_array[i - 1];\n')
-                    f.write('        double divisor = current.close + epsilon;\n')
-                    f.write('        double high_low = (current.high - current.low) / divisor;\n')
-                    f.write('        double hc = MathAbs(current.high - prev.close) / divisor;\n')
-                    f.write('        double lc = MathAbs(current.low - prev.close) / divisor;\n')
-                    f.write('        tr_sum += MathMax(high_low, MathMax(hc, lc));\n')
+                    f.write('        double tr_sum = 0.0;\n')
+                    f.write(f'        for(int idx = last_idx - {window} + 1; idx <= last_idx; idx++)\n')
+                    f.write('        {\n')
+                    f.write('            MqlRates current = rates_array[idx];\n')
+                    f.write('            MqlRates prev = rates_array[idx - 1];\n')
+                    f.write('            double divisor = current.close + epsilon;\n')
+                    f.write('            double high_low = (current.high - current.low) / divisor;\n')
+                    f.write('            double hc = MathAbs(current.high - prev.close) / divisor;\n')
+                    f.write('            double lc = MathAbs(current.low - prev.close) / divisor;\n')
+                    f.write('            tr_sum += MathMax(high_low, MathMax(hc, lc));\n')
+                    f.write('        }\n')
+                    f.write(f'        {i} = (tr_sum / {window}) / (rates_array[last_idx].close + epsilon);\n')
                     f.write('    }\n')
                     f.write('    \n')
-                    f.write(f'    {i} = (tr_sum / {window}) / (rates_array[last_idx].close + epsilon);\n')
                 elif i[:3] == 'bb_':
                     window = ''
                     for j in range(3, len(i)):
@@ -1015,22 +1121,22 @@ class FichEn:
                         else:
                             window += i[j]
                     window = int(window)
-                    f.write('    double sma_sum = 0.0;\n')
-                    f.write('    \n')
-                    f.write(f'    for(int i = last_idx - {window} + 1; i <= last_idx; i++)\n')
                     f.write('    {\n')
-                    f.write('        sma_sum += rates_array[i].close;\n')
+                    f.write('        double sma_sum = 0.0;\n')
+                    f.write(f'        for(int idx = last_idx - {window} + 1; idx <= last_idx; idx++)\n')
+                    f.write('        {\n')
+                    f.write('            sma_sum += rates_array[idx].close;\n')
+                    f.write('        }\n')
+                    f.write(f'        double sma = sma_sum / {window};\n')
+                    f.write('        double variance = 0.0;\n')
+                    f.write(f'        for(int idx = last_idx - {window} + 1; idx <= last_idx; idx++)\n')
+                    f.write('        {\n')
+                    f.write('            variance += MathPow(rates_array[idx].close - sma, 2);\n')
+                    f.write('        }\n')
+                    f.write(f'        double std = MathSqrt(variance / {window});\n')
+                    f.write(f'        {i} = (4.0 * std) / (sma + epsilon);\n')
                     f.write('    }\n')
-                    f.write(f'    double sma = sma_sum / {window};\n')
                     f.write('    \n')
-                    f.write('    double variance = 0.0;\n')
-                    f.write(f'    for(int i = last_idx - {window} + 1; i <= last_idx; i++)\n')
-                    f.write('    {\n')
-                    f.write('        variance += MathPow(rates_array[i].close - sma, 2);\n')
-                    f.write('    }\n')
-                    f.write(f'    double std = MathSqrt(variance / {window});\n')
-                    f.write('    \n')
-                    f.write(f'    {i} = (4.0 * std) / (sma + epsilon);\n')
 
             f.write('    \n')
             f.write('    // Flatten features in the same order as Python\n')
@@ -1130,23 +1236,29 @@ class VolClustGB(FichEn):
     def __init__(self, sett, early_stopping=True):
         self.models = []
         self.scaler = StandardScaler()
+        self.scaler_y = StandardScaler()
         self.X_shape = 0
         self.is_fitted = False
         self.onnx_load = False
         self.early_stopping = early_stopping
         self.V = Visualization('dark')
+        self.default_sett = {
+            'loss': 'squared_error',
+            'learning_rate': 0.01,
+            'n_estimators': 1,
+            'max_depth': 3,
+            'min_samples_split': 5,
+            'min_samples_leaf': 2,
+            'subsample': 0.8,
+            'random_state': 42,
+            'warm_start': True
+        }
+        self.meta = {
+            "model_type": "gb",
+            "model_settings": self.default_sett
+        }
         if sett == {}:
-            self.base_model = GradientBoostingRegressor(
-                loss='squared_error',
-                learning_rate=0.01,
-                n_estimators=1,
-                max_depth=3,
-                min_samples_split=5,
-                min_samples_leaf=2,
-                subsample=0.8,
-                random_state=42,
-                warm_start=True
-            )
+            self.base_model = GradientBoostingRegressor(**self.default_sett)
         else:
             self.base_model = GradientBoostingRegressor(**sett)
 
@@ -1159,9 +1271,24 @@ class VolClustGB(FichEn):
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(self.feature_list, f, ensure_ascii=False, indent=2)
 
+            self.meta = {
+                "model_type": "gb",
+                "model_settings": self.default_sett,
+                "input_bars": self.input_bars,
+                "horizon": self.horizon,
+                "trees_count": self.trees_count,
+            }
+            file_path = os.path.join(name, f"{name}_model_settings.json")
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(self.meta, f, ensure_ascii=False, indent=2)
+
             if hasattr(self, 'scaler'):
                 scaler_path = os.path.join(name, f"{name}_scaler.pkl")
                 joblib.dump(self.scaler, scaler_path)
+
+            if hasattr(self, 'scaler_y'):
+                scaler_path = os.path.join(name, f"{name}_scaler_y.pkl")
+                joblib.dump(self.scaler_y, scaler_path)
 
             for i in range(len(self.models)):
                 onx = convert_sklearn(self.models[i], initial_types=initial_type, target_opset=12)
@@ -1184,6 +1311,11 @@ class VolClustGB(FichEn):
                 joblib.dump(self.scaler, scaler_path)
                 print(f"Scaler сохранён в {scaler_path}")
 
+            if hasattr(self, 'scaler_y') and self.scaler_y is not None:
+                scaler_path = os.path.join(onnx_dir, f"{name}_scaler_y.pkl")
+                joblib.dump(self.scaler_y, scaler_path)
+                print(f"Scalery сохранён в {scaler_path}")
+
             for i in range(len(self.models)):
                 onx = convert_sklearn(self.models[i], initial_types=initial_type, target_opset=12)
                 file_path = os.path.join(onnx_dir, f"{name}_{i}.onnx")
@@ -1200,19 +1332,39 @@ class VolClustGB(FichEn):
         if not os.path.exists(name):
             raise FileNotFoundError(f"Папка {name} не найдена")
 
+        try:
+            file_path = os.path.join(name, f"{name}_features.json")
+            with open(file_path, 'r', encoding='utf-8') as f:
+                self.feature_list = json.load(f)
+        except FileNotFoundError:
+            print(f'Model {name} is not valid, file {name}_features.json is not found')
+            return
+
+        try:
+            file_path = os.path.join(name, f"{name}_model_settings.json")
+            with open(file_path, 'r', encoding='utf-8') as f:
+                self.meta = json.load(f)
+        except FileNotFoundError:
+            print(f'Model {name} is not valid, file {name}_model_settings.json is not found')
+            return
+
+        if self.meta['model_type'] != 'gb':
+            raise ValueError(f"Wrong model type, expected gb and not a {self.meta['model_type']}")
+
         scaler_files = [f for f in os.listdir(name) if f.endswith('_scaler.pkl')]
         if scaler_files:
             scaler_path = os.path.join(name, scaler_files[0])
             self.scaler = joblib.load(scaler_path)
 
+        scaler_files = [f for f in os.listdir(name) if f.endswith('_scaler_y.pkl')]
+        if scaler_files:
+            scaler_path = os.path.join(name, scaler_files[0])
+            self.scaler_y = joblib.load(scaler_path)
+
         model_files = [f for f in os.listdir(name) if f.endswith('.onnx')]
 
         if not model_files:
             raise FileNotFoundError(f"В папке {name} не найдено .onnx файлов")
-
-        file_path = os.path.join(name, f"{name}_features.json")
-        with open(file_path, 'r', encoding='utf-8') as f:
-            self.feature_list = json.load(f)
 
         model_files.sort()
         ml = len(model_files)
@@ -1244,21 +1396,27 @@ class VolClustXGB(FichEn):
     def __init__(self, sett, early_stopping=True):
         self.models = []
         self.scaler = StandardScaler()
+        self.scaler_y = StandardScaler()
         self.X_shape = 0
         self.is_fitted = False
         self.onnx_load = False
         self.early_stopping = early_stopping
         self.V = Visualization('dark')
+        self.default_sett = {
+            'objective': 'reg:squarederror',
+            'learning_rate': 0.1,
+            'n_estimators': 1,
+            'max_depth': 3,
+            'min_child_weight': 5,
+            'subsample': 0.8,
+            'random_state': 42
+        }
+        self.meta = {
+            "model_type": "xgb",
+            "model_settings": self.default_sett
+        }
         if sett == {}:
-            self.base_model = xgboost.XGBRegressor(
-                objective='reg:squarederror',
-                learning_rate=0.1,
-                n_estimators=1,
-                max_depth=3,
-                min_child_weight=5,
-                subsample=0.8,
-                random_state=42,
-            )
+            self.base_model = xgboost.XGBRegressor(**self.default_sett)
         else:
             self.base_model = xgboost.XGBRegressor(**sett)
 
@@ -1272,9 +1430,24 @@ class VolClustXGB(FichEn):
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(self.feature_list, f, ensure_ascii=False, indent=2)
 
+            self.meta = {
+                "model_type": "xgb",
+                "model_settings": self.default_sett,
+                "input_bars": self.input_bars,
+                "horizon": self.horizon,
+                "trees_count": self.trees_count,
+            }
+            file_path = os.path.join(name, f"{name}_model_settings.json")
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(self.meta, f, ensure_ascii=False, indent=2)
+
             if hasattr(self, 'scaler'):
                 scaler_path = os.path.join(name, f"{name}_scaler.pkl")
                 joblib.dump(self.scaler, scaler_path)
+
+            if hasattr(self, 'scaler_y'):
+                scaler_path = os.path.join(name, f"{name}_scaler_y.pkl")
+                joblib.dump(self.scaler_y, scaler_path)
 
             for i in range(len(self.models)):
                 onx = onnxmltools.convert_xgboost(self.models[i], initial_types=initial_type, target_opset=12)
@@ -1295,6 +1468,11 @@ class VolClustXGB(FichEn):
                 joblib.dump(self.scaler, scaler_path)
                 print(f"Scaler сохранён в {scaler_path}")
 
+            if hasattr(self, 'scaler_y') and self.scaler_y is not None:
+                scaler_path = os.path.join(onnx_dir, f"{name}_scaler_y.pkl")
+                joblib.dump(self.scaler_y, scaler_path)
+                print(f"Scalery сохранён в {scaler_path}")
+
             for i in range(len(self.models)):
                 onx = onnxmltools.convert_xgboost(self.models[i], initial_types=initial_type, target_opset=9)
                 model_path = os.path.join(onnx_dir, f"{name}_{i}.onnx")
@@ -1311,15 +1489,34 @@ class VolClustXGB(FichEn):
         if not os.path.exists(name):
             raise FileNotFoundError(f"Папка {name} не найдена")
 
-        file_path = os.path.join(name, f"{name}_features.json")
-        with open(file_path, 'r', encoding='utf-8') as f:
-            self.feature_list = json.load(f)
+        try:
+            file_path = os.path.join(name, f"{name}_features.json")
+            with open(file_path, 'r', encoding='utf-8') as f:
+                self.feature_list = json.load(f)
+        except FileNotFoundError:
+            print(f'Model {name} is not valid, file {name}_features.json is not found')
+            return
 
+        try:
+            file_path = os.path.join(name, f"{name}_model_settings.json")
+            with open(file_path, 'r', encoding='utf-8') as f:
+                self.meta = json.load(f)
+        except FileNotFoundError:
+            print(f'Model {name} is not valid, file {name}_model_settings.json is not found')
+            return
+
+        if self.meta['model_type'] != 'xgb':
+            raise ValueError(f"Wrong model type, expected xgb and not a {self.meta['model_type']}")
 
         scaler_files = [f for f in os.listdir(name) if f.endswith('_scaler.pkl')]
         if scaler_files:
             scaler_path = os.path.join(name, scaler_files[0])
             self.scaler = joblib.load(scaler_path)
+
+        scaler_files = [f for f in os.listdir(name) if f.endswith('_scaler_y.pkl')]
+        if scaler_files:
+            scaler_path = os.path.join(name, scaler_files[0])
+            self.scaler_y = joblib.load(scaler_path)
 
         model_files = [f for f in os.listdir(name) if f.endswith('.onnx')]
 
@@ -1354,24 +1551,29 @@ class VolClustLightGBM(FichEn):
     def __init__(self, sett, early_stopping=True):
         self.models = []
         self.scaler = StandardScaler()
+        self.scaler_y = StandardScaler()
         self.X_shape = 0
         self.is_fitted = False
         self.onnx_load = False
         self.early_stopping = early_stopping
         self.V = Visualization('dark')
+        self.default_sett = {
+            'objective': 'regression',
+            'num_leaves': 7,
+            'min_data_in_leaf': 3,
+            'min_data_in_bin': 3,
+            'learning_rate': 0.1,
+            'verbosity': -1,
+            'seed': 42
+        }
+        self.meta = {
+            "model_type": "lgbm",
+            "model_settings": self.default_sett
+        }
         if sett == {}:
-            self.base_model = lgb.LGBMRegressor(
-                objective='regression',
-                learning_rate=0.1,
-                n_estimators=1,
-                num_leaves= 7,
-                min_data_in_leaf=3,
-                min_data_in_bin=3,
-                seed=42,
-                verbosity=-1
-            )
+            self.base_model = lgb.LGBMRegressor(**self.default_sett)
         else:
-            self.base_model = (lgb.LGBMRegressor(**sett))
+            self.base_model = lgb.LGBMRegressor(**sett)
 
 
     def save(self, name, type_to_save='default'):
@@ -1383,9 +1585,24 @@ class VolClustLightGBM(FichEn):
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(self.feature_list, f, ensure_ascii=False, indent=2)
 
+            self.meta = {
+                "model_type": "lgbm",
+                "model_settings": self.default_sett,
+                "input_bars": self.input_bars,
+                "horizon": self.horizon,
+                "trees_count": self.trees_count,
+            }
+            file_path = os.path.join(name, f"{name}_model_settings.json")
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(self.meta, f, ensure_ascii=False, indent=2)
+
             if hasattr(self, 'scaler'):
                 scaler_path = os.path.join(name, f"{name}_scaler.pkl")
                 joblib.dump(self.scaler, scaler_path)
+
+            if hasattr(self, 'scaler_y'):
+                scaler_path = os.path.join(name, f"{name}_scaler_y.pkl")
+                joblib.dump(self.scaler_y, scaler_path)
 
             for i in range(len(self.models)):
                 onx = onnxmltools.convert_lightgbm(self.models[i], initial_types=initial_type, zipmap=False,
@@ -1406,6 +1623,11 @@ class VolClustLightGBM(FichEn):
                 joblib.dump(self.scaler, scaler_path)
                 print(f"Scaler сохранён в {scaler_path}")
 
+            if hasattr(self, 'scaler_y') and self.scaler_y is not None:
+                scaler_path = os.path.join(onnx_dir, f"{name}_scaler_y.pkl")
+                joblib.dump(self.scaler_y, scaler_path)
+                print(f"Scalery сохранён в {scaler_path}")
+
             for i in range(len(self.models)):
                 onx = onnxmltools.convert_lightgbm(self.models[i], initial_types=initial_type, zipmap=False,
                                                    target_opset=12)
@@ -1422,14 +1644,34 @@ class VolClustLightGBM(FichEn):
         if not os.path.exists(name):
             raise FileNotFoundError(f"Папка {name} не найдена")
 
-        file_path = os.path.join(name, f"{name}_features.json")
-        with open(file_path, 'r', encoding='utf-8') as f:
-            self.feature_list = json.load(f)
+        try:
+            file_path = os.path.join(name, f"{name}_features.json")
+            with open(file_path, 'r', encoding='utf-8') as f:
+                self.feature_list = json.load(f)
+        except FileNotFoundError:
+            print(f'Model {name} is not valid, file {name}_features.json is not found')
+            return
+
+        try:
+            file_path = os.path.join(name, f"{name}_model_settings.json")
+            with open(file_path, 'r', encoding='utf-8') as f:
+                self.meta = json.load(f)
+        except FileNotFoundError:
+            print(f'Model {name} is not valid, file {name}_model_settings.json is not found')
+            return
+
+        if self.meta['model_type'] != 'lgbm':
+            raise ValueError(f"Wrong model type, expected lgbm and not a {self.meta['model_type']}")
 
         scaler_files = [f for f in os.listdir(name) if f.endswith('_scaler.pkl')]
         if scaler_files:
             scaler_path = os.path.join(name, scaler_files[0])
             self.scaler = joblib.load(scaler_path)
+
+        scaler_files = [f for f in os.listdir(name) if f.endswith('_scaler_y.pkl')]
+        if scaler_files:
+            scaler_path = os.path.join(name, scaler_files[0])
+            self.scaler_y = joblib.load(scaler_path)
 
         model_files = [f for f in os.listdir(name) if f.endswith('.onnx')]
 
