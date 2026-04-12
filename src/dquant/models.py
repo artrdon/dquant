@@ -394,6 +394,12 @@ class FichEn:
         self.val_errors = []
         self.train_r2 = []
         self.val_r2 = []
+
+        self.best_val_error = float('inf')
+        self.best_r2 = -float('inf')
+        self.patience_counter = 0
+        self.patience = 5
+
         trees = 1
         start = time.time()
         try:
@@ -452,17 +458,19 @@ class FichEn:
                 var_val_r2 = float(v_r2)/horizon
 
                 if self.early_stopping:
-                    if previous_error_was_grow:
-                        print(f'training stopped by early stopping on {i} trees')
-                        if show_results:
-                            self.V.show_errors(self.train_errors, self.val_errors, self.train_r2, self.val_r2)
-                        self.is_fitted = True
-                        return
-                    else:
-                        if previous_error != 0 and previous_error < var_val_error:
-                            previous_error_was_grow = True
+                    if len(self.val_errors) > 0:
+                        current_min = min(self.val_errors)
+                        best_so_far = min(self.best_val_error, current_min)
 
-                previous_error = var_val_error
+                        no_improvement_count = len(self.val_errors) - self.val_errors.index(best_so_far) - 1
+
+                        if no_improvement_count >= self.patience:
+                            print(f'Early stopping at {i} trees (no improvement for {self.patience} steps)')
+                            if show_results:
+                                self.V.show_errors(self.train_errors, self.val_errors,
+                                                   self.train_r2, self.val_r2)
+                            self.is_fitted = True
+                            return
 
                 self.train_errors.append(var_test_error)
                 self.val_errors.append(var_val_error)
@@ -596,7 +604,7 @@ class FichEn:
 
 
     def show_train_results(self):
-        self.V.show_errors(self.train_errors, self.val_errors)
+        self.V.show_errors(self.train_errors, self.val_errors, self.train_r2, self.val_r2)
 
 
     def save_mql5(self, name):
@@ -608,6 +616,17 @@ class FichEn:
         }
         mean_str = ','.join(str(x) for x in scaler_data['mean'])
         std_str = ','.join(str(x) for x in scaler_data['std'])
+
+        scaler_data_y = {
+            "mean": self.scaler_y.mean_.tolist() if self.scaler_y.mean_ is not None else [],
+            "std": self.scaler_y.scale_.tolist() if self.scaler_y.scale_ is not None else [],
+            # scale_ = стандартное отклонение
+            "var": self.scaler_y.var_.tolist() if self.scaler_y.var_ is not None else []
+        }
+        mean_str_y = ','.join(str(x) for x in scaler_data_y['mean'])
+        std_str_y = ','.join(str(x) for x in scaler_data_y['std'])
+
+
         os.makedirs(name, exist_ok=True)
         print(f"Директория '{name}' создана или уже существует")
 
@@ -620,7 +639,7 @@ class FichEn:
         with open(mq5_file_path, "w", encoding="utf-8") as f:
             f.write("//+------------------------------------------------------------------+\n")
             f.write(f"//|                                                  {name}.mq5 |\n")
-            f.write("//|                                                  Made by dquant. |\n")
+            f.write("//|                                                  Made by DQuant. |\n")
             f.write("//|                                             https://dquant.space |\n")
             f.write("//+------------------------------------------------------------------+\n")
             f.write("#property indicator_buffers 2\n")
@@ -638,6 +657,9 @@ class FichEn:
             f.write("datetime dt = NULL;\n\n")
             f.write(f"double mean_[] = {{{mean_str}}};\n\n")
             f.write(f"double std_[] = {{{std_str}}};\n\n")
+
+            f.write(f"double mean_y[] = {{{mean_str_y}}};\n\n")
+            f.write(f"double std_y[] = {{{std_str_y}}};\n\n")
 
             f.write("//--- indicator buffers\n")
             f.write("double past_vol[];\n")
@@ -1200,8 +1222,11 @@ class FichEn:
                 f.write('         }\n')
                 f.write(f'         if(OnnxRun(model_handle{i}, ONNX_USE_CPU_ONLY, input_features, output))\n')
                 f.write('         {\n')
-                f.write(f'           future_vol[{len(self.models) - 1 - i}] = output[0];\n')
-                f.write(f'           past_vol[{len(self.models) - 1 - i}] = 0;\n')
+                f.write(f'           int target_index = {len(self.models) - 1 - i};\n')
+                f.write('           double scaled_prediction = output[0];\n')
+                f.write('           double original_prediction = scaled_prediction * std_y[target_index] + mean_y[target_index];\n')
+                f.write(f'           future_vol[target_index] = original_prediction;\n')
+                f.write(f'           past_vol[target_index] = 0;\n')
                 f.write('         }\n')
             f.write('   }\n')
             f.write('}\n\n')

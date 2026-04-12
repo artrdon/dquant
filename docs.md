@@ -1,6 +1,6 @@
 # DQuant Library Documentation
 
-**Version:** 1.1.2  
+**Version:** 1.1.3  
 **License:** MIT  
 **GitHub:** [github.com/artrdon/dquant](https://github.com/artrdon/dquant)  
 **PyPI:** [pypi.org/project/dquant](https://pypi.org/project/dquant)  
@@ -764,4 +764,8 @@ SOFTWARE.
 
 ### Version 1.1.2 (2026-03-27)
 - Fixed error in feature calculation
+
+### Version 1.1.3 (2026-04-12)
+- Target value scaling
+- Added r2-score metric
 

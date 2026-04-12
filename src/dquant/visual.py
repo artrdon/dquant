@@ -316,32 +316,29 @@ class Visualization:
 
     def show_errors(self, train_errors, val_errors, train_r2, val_r2, save_path=None):
         # Первый график - MSE Loss
-        fig1, ax1 = self.__create_figure(figsize=(10, 6))
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
 
+        # Первый график - MSE Loss
         ax1.plot(list(train_errors), label='Train Loss',
                  color=self.config['colors']['primary'])
         ax1.plot(list(val_errors), label='Validation Loss',
                  color=self.config['colors']['secondary'])
         ax1.set_xlabel('Trees')
         ax1.set_ylabel('MSE Loss')
-        ax1.set_title('Training and Validation MSE Loss over Trees')
+        ax1.set_title('MSE Loss over Trees')
         ax1.grid(True)
 
         self.__style_axes(ax1)
         self.__style_legend(ax1)
 
-        plt.tight_layout()
-
         # Второй график - R² Score
-        fig2, ax2 = self.__create_figure(figsize=(10, 6))
-
         ax2.plot(list(train_r2), label='Train R²',
                  color=self.config['colors']['primary'])
         ax2.plot(list(val_r2), label='Validation R²',
                  color=self.config['colors']['secondary'])
         ax2.set_xlabel('Trees')
         ax2.set_ylabel('R² Score')
-        ax2.set_title('Training and Validation R² Score over Trees')
+        ax2.set_title('R² Score over Trees')
         ax2.grid(True)
 
         self.__style_axes(ax2)
@@ -349,10 +346,8 @@ class Visualization:
 
         plt.tight_layout()
 
-        # Сохранение
         if save_path:
-            self.__save_figure(fig1, f"{save_path}_mse")
-            self.__save_figure(fig2, f"{save_path}_r2")
+            self.__save_figure(fig, save_path)
 
         plt.show()
 

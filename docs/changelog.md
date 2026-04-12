@@ -18,3 +18,7 @@
 
 ### Version 1.1.2 (2026-03-27)
 - Fixed error in feature calculation
+
+### Version 1.1.3 (2026-04-12)
+- Target value scaling
+- Added r2-score metric

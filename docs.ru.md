@@ -1,6 +1,6 @@
 # Документация библиотеки DQuant
 
-**Версия:** 1.1.2  
+**Версия:** 1.1.3  
 **Лицензия:** MIT  
 **GitHub:** [github.com/artrdon/dquant](https://github.com/artrdon/dquant)  
 **PyPI:** [pypi.org/project/dquant](https://pypi.org/project/dquant)  
@@ -764,3 +764,6 @@ SOFTWARE.
 ### Версия 1.1.2 (27-03-2026)
 - Исправлена ошибка при расчете признаков
 
+### Версия 1.1.3 (12-04-2026)
+- Масштабирование целевых значений
+- Добавлена метрика r2-score

@@ -3,12 +3,12 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dquant"
-version = "1.1.2"
+name = "DQuant"
+version = "1.1.3"
 authors = [
   { name="Denis Makarov" },
 ]
-description = "dquant — это Python-библиотека с открытым исходным кодом для автоматического прогнозирования волатильности финансовых временных рядов. Она берёт на себя все этапы построения модели: от сырых цен до готового прогноза."
+description = "DQuant is an open-source Python library for automated volatility forecasting of financial time series. It handles all stages of model construction, from raw prices to the final forecast."
 readme = "README.md"
 requires-python = ">=3.7"
 classifiers = [
