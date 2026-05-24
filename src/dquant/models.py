@@ -397,10 +397,6 @@ class FichEn:
         x = np.array(XX)
         y = np.array(YY)
 
-        print("=" * 60)
-        print("ЭТАП 2: WALK-FORWARD ВАЛИДАЦИЯ (ФИКСИРОВАННОЕ ОКНО)")
-        print("=" * 60)
-
         # Параметры фиксированного окна
         train_window_size = input_bars  # сколько последних окон использовать для обучения
         # Минимальный индекс, с которого можно начинать валидацию (должен быть >= train_window_size)
@@ -565,8 +561,8 @@ class FichEn:
         x = np.array(XX)
         y = np.array(YY)
 
-        print(x[52])
-        print(y[52])
+        #print(x[52])
+        #print(y[52])
 
         X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2, shuffle=False, random_state=42)
         X_scaled = self.scaler.fit_transform(X_train)
@@ -684,8 +680,8 @@ class FichEn:
         else:
             X = feature_func(latest_data)
 
-        print(len(latest_data))
-        print(len(X))
+        #print(len(latest_data))
+        #print(len(X))
 
         if not self.is_fitted and not self.onnx_load:
             raise ValueError("Модель еще не обучена!")
