@@ -397,7 +397,7 @@ class FichEn:
         x = np.array(XX)
         y = np.array(YY)
 
-        # Параметры фиксированного окна
+        # Параметры фиксированного окна h
         train_window_size = input_bars  # сколько последних окон использовать для обучения
         # Минимальный индекс, с которого можно начинать валидацию (должен быть >= train_window_size)
         start_val_idx = train_window_size
