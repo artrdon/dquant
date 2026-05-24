@@ -377,7 +377,7 @@ class FichEn:
             if target_func == None:
                 window_targets = self._prepare_single_window_target(y[i])
             else:
-                window_targets = target_func(x[i])
+                window_targets = target_func(y[i])
 
             XX.append(window_features)
             YY.append(window_targets)
@@ -543,7 +543,7 @@ class FichEn:
             if target_func == None:
                 window_targets = self._prepare_single_window_target(y[i])
             else:
-                window_targets = target_func(x[i])
+                window_targets = target_func(y[i])
 
             #print(len(window_features))
             XX.append(window_features)

@@ -314,6 +314,41 @@ class Visualization:
 
         plt.show()
 
+    def forward_validation_errors(self, mse_errors, r2_errors, save_path=None):
+        # Первый график - MSE Loss
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+
+        # Первый график - MSE Loss
+        ax1.plot(list(mse_errors), label='Train Loss',
+                 color=self.config['colors']['primary'])
+        ax1.set_xlabel('Trees')
+        ax1.set_ylabel('MSE Loss')
+        ax1.set_title('MSE Loss over Trees')
+        ax1.grid(True)
+
+        self.__style_axes(ax1)
+        self.__style_legend(ax1)
+
+        # Второй график - R² Score
+        ax2.plot(list(r2_errors), label='Train R²',
+                 color=self.config['colors']['primary'])
+
+        ax2.set_xlabel('Trees')
+        ax2.set_ylabel('R² Score')
+        ax2.set_title('R² Score over Trees')
+        ax2.grid(True)
+
+        self.__style_axes(ax2)
+        self.__style_legend(ax2)
+
+        plt.tight_layout()
+
+        if save_path:
+            self.__save_figure(fig, save_path)
+
+        plt.show()
+
+
     def show_errors(self, train_errors, val_errors, train_r2, val_r2, save_path=None):
         # Первый график - MSE Loss
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))

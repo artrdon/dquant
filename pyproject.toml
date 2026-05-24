@@ -3,8 +3,8 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "DQuant"
-version = "1.1.3"
+name = "dquant"
+version = "1.1.4-beta"
 authors = [
   { name="Denis Makarov" },
 ]
