@@ -3,6 +3,7 @@ import joblib
 import re
 import onnxruntime as ort
 import os
+import sys
 import onnxmltools
 from onnxconverter_common.data_types import FloatTensorType
 from .visual import Visualization
@@ -25,6 +26,23 @@ import lightgbm as lgb
 
 
 class FichEn:
+    def dquantprint(self, *args, sep=' ', end='\n', file=None, flush=False):
+        if self.output == False:
+            return
+        if file is None:
+            file = sys.stdout  # по умолчанию вывод в консоль
+
+        # Преобразуем все аргументы в строки и соединяем через sep
+        output = sep.join(str(arg) for arg in args)
+        output += end  # добавляем завершающий символ
+
+        # Записываем в файловый объект
+        file.write(output)
+
+        # Принудительно сбрасываем буфер, если нужно
+        if flush:
+            file.flush()
+
     def _DataSplitting(self,
             df: pd.DataFrame,
             window_in: int,
@@ -387,13 +405,13 @@ class FichEn:
             bar = '█' * filled_chars + '░' * (50 - filled_chars)
             time_per = time.time() - startt
             if percent < 10:
-                print(f'\rПодготовка данных: |{bar}|   {percent:.2f}%  Осталось {time_per*(lx-i):.2f} секунд', end='', flush=True)
+                self.dquantprint(f'\rПодготовка данных: |{bar}|   {percent:.2f}%  Осталось {time_per*(lx-i):.2f} секунд', end='', flush=True)
             elif percent >= 10 and percent < 100:
-                print(f'\rПодготовка данных: |{bar}|  {percent:.2f}%   Осталось {time_per*(lx-i):.2f} секунд', end='', flush=True)
+                self.dquantprint(f'\rПодготовка данных: |{bar}|  {percent:.2f}%   Осталось {time_per*(lx-i):.2f} секунд', end='', flush=True)
             else:
-                print(f'\rПодготовка данных: |{bar}| {percent:.2f}%    Осталось {time_per*(lx-i):.2f} секунд', end='', flush=True)
+                self.dquantprint(f'\rПодготовка данных: |{bar}| {percent:.2f}%    Осталось {time_per*(lx-i):.2f} секунд', end='', flush=True)
 
-        print()
+        self.dquantprint()
         x = np.array(XX)
         y = np.array(YY)
 
@@ -406,9 +424,9 @@ class FichEn:
         if total_iterations <= 0:
             raise ValueError(f"Слишком мало данных: всего окон {len(x)}, а train_window_size={train_window_size}")
 
-        print(f"Всего окон: {len(x)}")
-        print(f"Размер окна обучения: {train_window_size}")
-        print(f"Шагов валидации: {total_iterations}")
+        self.dquantprint(f"Всего окон: {len(x)}")
+        self.dquantprint(f"Размер окна обучения: {train_window_size}")
+        self.dquantprint(f"Шагов валидации: {total_iterations}")
 
         all_train_errors = []
         all_val_errors = []
@@ -497,19 +515,17 @@ class FichEn:
             percent = (iter_num / total_iterations) * 100
             filled = int(percent / 2)
             bar = '█' * filled + '░' * (50 - filled)
-            print(
-                f'\rWalk-Forward: |{bar}| {percent:.1f}% - Итерация {iter_num}/{total_iterations} - Val MSE: {val_error:.6f} - need time: {(time.time()-start_it)*(total_iterations-iter_num)}',
+            self.dquantprint(
+                f'\rWalk-Forward: |{bar}| {percent:.1f}% - Iteration {iter_num}/{total_iterations} - Val MSE: {val_error:.6f} - need time: {(time.time()-start_it)*(total_iterations-iter_num)} seconds',
                 end='', flush=True)
 
-        print("\nWalk-Forward валидация завершена!")
-        print(f"Средняя ошибка валидации (MSE): {np.mean(all_val_errors):.6f} +/- {np.std(all_val_errors):.6f}")
-        print(f"Средний R² валидации: {np.mean(all_val_r2):.4f} +/- {np.std(all_val_r2):.4f}")
-        print(f"Максимальная ошибка валидации: {np.max(all_val_errors):.6f}")
-        print(f"Минимальная ошибка валидации: {np.min(all_val_errors):.6f}")
+        #self.dquantprint("\nWalk-Forward валидация завершена!")
+        self.dquantprint(f"Средняя ошибка валидации (MSE): {np.mean(all_val_errors):.6f} +/- {np.std(all_val_errors):.6f}")
+        self.dquantprint(f"Средний R² валидации: {np.mean(all_val_r2):.4f} +/- {np.std(all_val_r2):.4f}")
+        self.dquantprint(f"Максимальная ошибка валидации: {np.max(all_val_errors):.6f}")
+        self.dquantprint(f"Минимальная ошибка валидации: {np.min(all_val_errors):.6f}")
         if show_results:
             self.V.forward_validation_errors(all_val_errors, all_val_r2)
-        # Если не нужно финальное обучение после walk-forward, можно завершить
-        # self.is_fitted = True
         return
 
     def fit(self, data, feature_list, input_bars, horizon, trees_count, show_results=False, feature_func=None, target_func=None):
@@ -541,7 +557,7 @@ class FichEn:
             else:
                 window_targets = target_func(y[i])
 
-            #print(len(window_features))
+            #self.dquantprint(len(window_features))
             XX.append(window_features)
             YY.append(window_targets)
 
@@ -550,19 +566,17 @@ class FichEn:
             bar = '█' * filled_chars + '░' * (50 - filled_chars)
             time_per = time.time() - startt
             if percent < 10:
-                print(f'\rПодготовка данных: |{bar}|   {percent:.2f}%  Осталось {time_per*(lx-i):.2f} секунд', end='', flush=True)
+                self.dquantprint(f'\rПодготовка данных: |{bar}|   {percent:.2f}%  Осталось {time_per*(lx-i):.2f} секунд', end='', flush=True)
             elif percent >= 10 and percent < 100:
-                print(f'\rПодготовка данных: |{bar}|  {percent:.2f}%   Осталось {time_per*(lx-i):.2f} секунд', end='', flush=True)
+                self.dquantprint(f'\rПодготовка данных: |{bar}|  {percent:.2f}%   Осталось {time_per*(lx-i):.2f} секунд', end='', flush=True)
             else:
-                print(f'\rПодготовка данных: |{bar}| {percent:.2f}%    Осталось {time_per*(lx-i):.2f} секунд', end='', flush=True)
+                self.dquantprint(f'\rПодготовка данных: |{bar}| {percent:.2f}%    Осталось {time_per*(lx-i):.2f} секунд', end='', flush=True)
 
-        print()
-        print("time spended: ", time.time() - start_)
+        self.dquantprint()
+        self.dquantprint("time spended: ", time.time() - start_)
         x = np.array(XX)
         y = np.array(YY)
 
-        #print(x[52])
-        #print(y[52])
 
         X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2, shuffle=False, random_state=42)
         X_scaled = self.scaler.fit_transform(X_train)
@@ -585,7 +599,7 @@ class FichEn:
         start = time.time()
         try:
             for i in range(trees, trees_count+1):
-                print(f'{i} trees')
+                self.dquantprint(f'{i} trees')
                 t_error = 0
                 v_error = 0
                 t_r2 = 0
@@ -598,7 +612,7 @@ class FichEn:
                 if len(Y_scaled.shape) == 2 and Y_scaled.shape[1] > 1:
                     for h_idx, h in enumerate(horizon_list):
                         if h_idx >= Y_scaled.shape[1]:
-                            print(f"Предупреждение: горизонт {h} выходит за пределы y, пропускаем")
+                            self.dquantprint(f"Предупреждение: горизонт {h} выходит за пределы y, пропускаем")
                             continue
 
                         y_h = Y_scaled.iloc[:, h_idx] if hasattr(Y_scaled, 'iloc') else Y_scaled[:, h_idx]
@@ -646,7 +660,7 @@ class FichEn:
                         no_improvement_count = len(self.val_errors) - self.val_errors.index(best_so_far) - 1
 
                         if no_improvement_count >= self.patience:
-                            print(f'Early stopping at {i} trees (no improvement for {self.patience} steps)')
+                            self.dquantprint(f'Early stopping at {i} trees (no improvement for {self.patience} steps)')
                             if show_results:
                                 self.V.show_errors(self.train_errors, self.val_errors,
                                                    self.train_r2, self.val_r2)
@@ -657,19 +671,19 @@ class FichEn:
                 self.val_errors.append(var_val_error)
                 self.train_r2.append(var_test_r2)
                 self.val_r2.append(var_val_r2)
-                print('Train error:      ', var_test_error)
-                print('Validation error: ', var_val_error)
-                print('Train r2:         ', var_test_r2)
-                print('Validation r2:    ', var_val_r2)
-                print(f"Затрачено времени: {time.time() - start} сек")
+                self.dquantprint('Train MSE:      ', var_test_error)
+                self.dquantprint('Validation MSE: ', var_val_error)
+                self.dquantprint('Train r2:         ', var_test_r2)
+                self.dquantprint('Validation r2:    ', var_val_r2)
+                self.dquantprint(f"Затрачено времени: {time.time() - start} сек")
 
         except KeyboardInterrupt:
-            print("\nОбучение прервано по Ctrl+C!")
+            self.dquantprint("\nОбучение прервано по Ctrl+C!")
 
         if show_results:
             self.V.show_errors(self.train_errors, self.val_errors, self.train_r2, self.val_r2)
 
-        print('model is trained')
+        self.dquantprint('model is trained')
         self.is_fitted = True
 
         return self.train_errors, self.val_errors
@@ -679,9 +693,6 @@ class FichEn:
             X = self._prepare_single_window_features(latest_data, self.feature_list)
         else:
             X = feature_func(latest_data)
-
-        #print(len(latest_data))
-        #print(len(X))
 
         if not self.is_fitted and not self.onnx_load:
             raise ValueError("Модель еще не обучена!")
@@ -812,7 +823,7 @@ class FichEn:
 
 
         os.makedirs(name, exist_ok=True)
-        print(f"Директория '{name}' создана или уже существует")
+        self.dquantprint(f"Директория '{name}' создана или уже существует")
 
         # 2. Создаём папку для ONNX файлов
         onnx_dir = os.path.join(name, f"{name}_onnx")
@@ -1415,7 +1426,7 @@ class FichEn:
             f.write('   }\n')
             f.write('}\n\n')
 
-        print(f"Файл {mq5_file_path} успешно создан")
+        self.dquantprint(f"Файл {mq5_file_path} успешно создан")
 
         # 4. Создаём файл проекта MQL5 (.mqproj)
         proj_file_path = os.path.join(name, f"{name}.mqproj")
@@ -1450,12 +1461,13 @@ class FichEn:
             f.write('  ]\n')
             f.write('}\n')
 
-        print(f"Файл {proj_file_path} успешно создан")
+        self.dquantprint(f"Файл {proj_file_path} успешно создан")
 
 
 
 class VolClustGB(FichEn):
-    def __init__(self, sett, early_stopping=True):
+    def __init__(self, sett, early_stopping=True, output=True):
+        self.output = output
         self.models = []
         self.scaler = StandardScaler()
         self.scaler_y = StandardScaler()
@@ -1523,7 +1535,7 @@ class VolClustGB(FichEn):
             self.save_mql5(name)
             onnx_dir = os.path.join(name, f"{name}_onnx")
             os.makedirs(onnx_dir, exist_ok=True)
-            print(f"Директория для ONNX файлов создана: {onnx_dir}")
+            self.dquantprint(f"Директория для ONNX файлов создана: {onnx_dir}")
 
             # 4. Сохраняем модели и scaler в поддиректорию
             initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
@@ -1531,21 +1543,21 @@ class VolClustGB(FichEn):
             if hasattr(self, 'scaler') and self.scaler is not None:
                 scaler_path = os.path.join(onnx_dir, f"{name}_scaler.pkl")
                 joblib.dump(self.scaler, scaler_path)
-                print(f"Scaler сохранён в {scaler_path}")
+                self.dquantprint(f"Scaler сохранён в {scaler_path}")
 
             if hasattr(self, 'scaler_y') and self.scaler_y is not None:
                 scaler_path = os.path.join(onnx_dir, f"{name}_scaler_y.pkl")
                 joblib.dump(self.scaler_y, scaler_path)
-                print(f"Scalery сохранён в {scaler_path}")
+                self.dquantprint(f"Scalery сохранён в {scaler_path}")
 
             for i in range(len(self.models)):
                 onx = convert_sklearn(self.models[i], initial_types=initial_type, target_opset=12)
                 file_path = os.path.join(onnx_dir, f"{name}_{i}.onnx")
                 with open(file_path, "wb") as f:
                     f.write(onx.SerializeToString())
-                print(f"Модель {i} сохранена в {file_path}")
+                self.dquantprint(f"Модель {i} сохранена в {file_path}")
 
-            print(f"Все операции в директории '{name}' успешно завершены!")
+            self.dquantprint(f"Все операции в директории '{name}' успешно завершены!")
 
 
     def load(self, name):
@@ -1559,7 +1571,7 @@ class VolClustGB(FichEn):
             with open(file_path, 'r', encoding='utf-8') as f:
                 self.feature_list = json.load(f)
         except FileNotFoundError:
-            print(f'Model {name} is not valid, file {name}_features.json is not found')
+            self.dquantprint(f'Model {name} is not valid, file {name}_features.json is not found')
             return
 
         try:
@@ -1567,7 +1579,7 @@ class VolClustGB(FichEn):
             with open(file_path, 'r', encoding='utf-8') as f:
                 self.meta = json.load(f)
         except FileNotFoundError:
-            print(f'Model {name} is not valid, file {name}_model_settings.json is not found')
+            self.dquantprint(f'Model {name} is not valid, file {name}_model_settings.json is not found')
             return
 
         if self.meta['model_type'] != 'gb':
@@ -1615,7 +1627,8 @@ class VolClustGB(FichEn):
 
 
 class VolClustXGB(FichEn):
-    def __init__(self, sett, early_stopping=True):
+    def __init__(self, sett, early_stopping=True, output=True):
+        self.output = output
         self.models = []
         self.scaler = StandardScaler()
         self.scaler_y = StandardScaler()
@@ -1680,7 +1693,7 @@ class VolClustXGB(FichEn):
             self.save_mql5(name)
             onnx_dir = os.path.join(name, f"{name}_onnx")
             os.makedirs(onnx_dir, exist_ok=True)
-            print(f"Директория для ONNX файлов создана: {onnx_dir}")
+            self.dquantprint(f"Директория для ONNX файлов создана: {onnx_dir}")
 
             # 4. Сохраняем модели и scaler в поддиректорию
             initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
@@ -1688,20 +1701,20 @@ class VolClustXGB(FichEn):
             if hasattr(self, 'scaler') and self.scaler is not None:
                 scaler_path = os.path.join(onnx_dir, f"{name}_scaler.pkl")
                 joblib.dump(self.scaler, scaler_path)
-                print(f"Scaler сохранён в {scaler_path}")
+                self.dquantprint(f"Scaler сохранён в {scaler_path}")
 
             if hasattr(self, 'scaler_y') and self.scaler_y is not None:
                 scaler_path = os.path.join(onnx_dir, f"{name}_scaler_y.pkl")
                 joblib.dump(self.scaler_y, scaler_path)
-                print(f"Scalery сохранён в {scaler_path}")
+                self.dquantprint(f"Scalery сохранён в {scaler_path}")
 
             for i in range(len(self.models)):
                 onx = onnxmltools.convert_xgboost(self.models[i], initial_types=initial_type, target_opset=9)
                 model_path = os.path.join(onnx_dir, f"{name}_{i}.onnx")
                 onnxmltools.utils.save_model(onx, model_path)
-                print(f"Модель {i} сохранена в {model_path}")
+                self.dquantprint(f"Модель {i} сохранена в {model_path}")
 
-            print(f"Все операции в директории '{name}' успешно завершены!")
+            self.dquantprint(f"Все операции в директории '{name}' успешно завершены!")
 
 
 
@@ -1716,7 +1729,7 @@ class VolClustXGB(FichEn):
             with open(file_path, 'r', encoding='utf-8') as f:
                 self.feature_list = json.load(f)
         except FileNotFoundError:
-            print(f'Model {name} is not valid, file {name}_features.json is not found')
+            self.dquantprint(f'Model {name} is not valid, file {name}_features.json is not found')
             return
 
         try:
@@ -1724,7 +1737,7 @@ class VolClustXGB(FichEn):
             with open(file_path, 'r', encoding='utf-8') as f:
                 self.meta = json.load(f)
         except FileNotFoundError:
-            print(f'Model {name} is not valid, file {name}_model_settings.json is not found')
+            self.dquantprint(f'Model {name} is not valid, file {name}_model_settings.json is not found')
             return
 
         if self.meta['model_type'] != 'xgb':
@@ -1770,7 +1783,8 @@ class VolClustXGB(FichEn):
 
 
 class VolClustLightGBM(FichEn):
-    def __init__(self, sett, early_stopping=True):
+    def __init__(self, sett, early_stopping=True, output=True):
+        self.output = output
         self.models = []
         self.scaler = StandardScaler()
         self.scaler_y = StandardScaler()
@@ -1835,7 +1849,7 @@ class VolClustLightGBM(FichEn):
             self.save_mql5(name)
             onnx_dir = os.path.join(name, f"{name}_onnx")
             os.makedirs(onnx_dir, exist_ok=True)
-            print(f"Директория для ONNX файлов создана: {onnx_dir}")
+            self.dquantprint(f"Директория для ONNX файлов создана: {onnx_dir}")
 
             # 4. Сохраняем модели и scaler в поддиректорию
             initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
@@ -1843,21 +1857,21 @@ class VolClustLightGBM(FichEn):
             if hasattr(self, 'scaler') and self.scaler is not None:
                 scaler_path = os.path.join(onnx_dir, f"{name}_scaler.pkl")
                 joblib.dump(self.scaler, scaler_path)
-                print(f"Scaler сохранён в {scaler_path}")
+                self.dquantprint(f"Scaler сохранён в {scaler_path}")
 
             if hasattr(self, 'scaler_y') and self.scaler_y is not None:
                 scaler_path = os.path.join(onnx_dir, f"{name}_scaler_y.pkl")
                 joblib.dump(self.scaler_y, scaler_path)
-                print(f"Scalery сохранён в {scaler_path}")
+                self.dquantprint(f"Scalery сохранён в {scaler_path}")
 
             for i in range(len(self.models)):
                 onx = onnxmltools.convert_lightgbm(self.models[i], initial_types=initial_type, zipmap=False,
                                                    target_opset=12)
                 file_path = os.path.join(onnx_dir, f"{name}_{i}.onnx")
                 onnxmltools.utils.save_model(onx, file_path)
-                print(f"Модель {i} сохранена в {file_path}")
+                self.dquantprint(f"Модель {i} сохранена в {file_path}")
 
-            print(f"Все операции в директории '{name}' успешно завершены!")
+            self.dquantprint(f"Все операции в директории '{name}' успешно завершены!")
 
 
     def load(self, name):
@@ -1871,7 +1885,7 @@ class VolClustLightGBM(FichEn):
             with open(file_path, 'r', encoding='utf-8') as f:
                 self.feature_list = json.load(f)
         except FileNotFoundError:
-            print(f'Model {name} is not valid, file {name}_features.json is not found')
+            self.dquantprint(f'Model {name} is not valid, file {name}_features.json is not found')
             return
 
         try:
@@ -1879,7 +1893,7 @@ class VolClustLightGBM(FichEn):
             with open(file_path, 'r', encoding='utf-8') as f:
                 self.meta = json.load(f)
         except FileNotFoundError:
-            print(f'Model {name} is not valid, file {name}_model_settings.json is not found')
+            self.dquantprint(f'Model {name} is not valid, file {name}_model_settings.json is not found')
             return
 
         if self.meta['model_type'] != 'lgbm':
