@@ -22,3 +22,12 @@
 ### Version 1.1.3 (2026-04-12)
 - Target value scaling
 - Added r2-score metric
+
+### Version 1.1.4 (2026-05-25)
+- Added walk forward validation
+- Speeded up data preparation
+- Function for retrieving data: get_data()
+
+### Version 1.2.0 (2026-05-31)
+- Training via the QLIKE loss function
+- Added the QLIKE metric

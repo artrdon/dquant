@@ -1,5 +1,14 @@
 ### 5.2 Working with Different Data Sources
 
+#### 5.2.0 get_data() function
+
+```python
+from dquant.get_data import get_data
+
+df = get_data("BTC-USD", start="2020-01-01", end="2023-01-01", interval='1d')
+```
+The data will be received immediately in the required format
+
 #### 5.2.1 Yahoo Finance
 
 ```python

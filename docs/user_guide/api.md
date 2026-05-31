@@ -11,10 +11,12 @@
 | `VolClustLightGBM` | Class for volatility forecasting using LightGBM |
 #### 5.1.1 Initialization Parameters
 
-| Parameter | Type | Default | Description |
-|:-----------------|:---|:-------------------------------------|:---|
-| `sett` | dict | `Default model hyperparameters` | Model hyperparameters |
-| `early_stopping` | bool | `True` | Enable early stopping |
+| Parameter | Type | Default | Description                                                 |
+|:-----------------|:---|:-------------------------------------|:------------------------------------------------------------|
+| `sett` | dict | `Default model hyperparameters` | Model hyperparameters                                       |
+| `early_stopping` | bool | `True` | Enable early stopping                                       |
+| `output`         | bool | `True`                               | Enable training logging                                     |
+| `qlike`          | bool | `True`                               | Train using the QLIKE loss function (only VolClustXGB and VolClustLightGBM) |
 
 **Example:**
 ```python
@@ -73,7 +75,45 @@ prediction = model.forecast(df)
 
 Returns volatility forecast for the horizon specified during training.
 
-#### 5.1.4 save Method
+
+#### 5.1.4 forward Method
+
+```python
+features = [
+    'TR',
+    'returns',
+    'abs_returns',
+    'gap',
+    'body',
+    'shadow',
+    'close_position',
+    'roll_atr_14'
+]
+model.forward(
+    df,
+    feature_list=features,
+    trees=10,
+    input_bars=70, 
+    horizon=20, 
+    trees_count=200, 
+    show_results=True
+)
+```
+**Parameters:**
+
+| Parameter      | Type | Default | Description |
+|:---------------|:-------------|:-------------|:--------------------------------------------------------------------|
+| `data`         | pd.DataFrame | required | Input data |
+| `feature_list` | list | required | Features for validation |
+| `trees`        | int | required | Number of trees for validation |
+| `input_bars`   | int | required | Number of candles used for forecasting |
+| `horizon`      | int | required | Forecast horizon (number of steps forward) |
+| `trees_count`  | int | required | Maximum number of trees |
+| `show_results` | bool | False | Show graph after validation |
+| `feature_func` | function | None | Use your own function to create features |
+| `target_func`  | function | None | Use your own function to create targets (target values) |
+
+#### 5.1.5 save Method
 
 ```python
 model.save('name')
@@ -93,7 +133,7 @@ model.save('name', type_to_save='mql5')
 ```
 Done! Now you can use your trained models in Meta Trader 5.
 
-#### 5.1.5 load Method
+#### 5.1.6 load Method
 
 ```python
 model.load('name')
@@ -105,7 +145,7 @@ model.load('name')
 |:---|:---|:---|:---|
 | `name` | str | required | Name of the directory with saved models |
 
-#### 5.1.6 show_train_results Method
+#### 5.1.7 show_train_results Method
 
 ```python
 model.show_train_results()

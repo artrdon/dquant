@@ -1,6 +1,6 @@
 # DQuant Library Documentation
 
-**Version:** 1.1.3  
+**Version:** 1.2.0
 **License:** MIT  
 **GitHub:** [github.com/artrdon/dquant](https://github.com/artrdon/dquant)  
 **PyPI:** [pypi.org/project/dquant](https://pypi.org/project/dquant)  
@@ -33,10 +33,12 @@
      - 5.1.1 [Initialization Parameters](#511-initialization-parameters)
      - 5.1.2 [fit Method](#512-fit-method)
      - 5.1.3 [forecast Method](#513-forecast-method)
-     - 5.1.4 [save Method](#514-save-method)
-     - 5.1.5 [load Method](#515-load-method)
-     - 5.1.6 [show_train_results Method](#516-show_train_results-method)
+     - 5.1.4 [forward Method](#514-forward-method)
+     - 5.1.5 [save Method](#515-save-method)
+     - 5.1.6 [load Method](#516-load-method)
+     - 5.1.7 [show_train_results Method](#517-show_train_results-method)
    - 5.2 [Working with Different Data Sources](#52-working-with-different-data-sources)
+     - 5.2.0 [get_data() function](#520-get_data()-function)
      - 5.2.1 [Yahoo Finance](#521-yahoo-finance)
      - 5.2.2 [MetaTrader 5](#522-metatrader-5)
      - 5.2.3 [Other Sources](#523-other-sources)
@@ -367,6 +369,8 @@ When saving, the following are preserved:
 |:-----------------|:---|:-------------------------------------|:---|
 | `sett` | dict | `Default model hyperparameters` | Model hyperparameters |
 | `early_stopping` | bool | `True` | Enable early stopping |
+| `output`         | bool | `True`                               | Enable training logging     |
+| `qlike`          | bool | `True`                               | Train using the QLIKE loss function (only VolClustXGB and VolClustLightGBM)|
 
 **Example:**
 ```python
@@ -425,7 +429,44 @@ prediction = model.forecast(df)
 
 Returns volatility forecast for the horizon specified during training.
 
-#### 5.1.4 save Method
+#### 5.1.4 forward Method
+
+```python
+features = [
+    'TR',
+    'returns',
+    'abs_returns',
+    'gap',
+    'body',
+    'shadow',
+    'close_position',
+    'roll_atr_14'
+]
+model.forward(
+    df,
+    feature_list=features,
+    trees=10,
+    input_bars=70, 
+    horizon=20, 
+    trees_count=200, 
+    show_results=True
+)
+```
+**Parameters:**
+
+| Parameter      | Type | Default | Description |
+|:---------------|:-------------|:-------------|:--------------------------------------------------------------------|
+| `data`         | pd.DataFrame | required | Input data |
+| `feature_list` | list | required | Features for validation |
+| `trees`        | int | required | Number of trees for validation |
+| `input_bars`   | int | required | Number of candles used for forecasting |
+| `horizon`      | int | required | Forecast horizon (number of steps forward) |
+| `trees_count`  | int | required | Maximum number of trees |
+| `show_results` | bool | False | Show graph after validation |
+| `feature_func` | function | None | Use your own function to create features |
+| `target_func`  | function | None | Use your own function to create targets (target values) |
+
+#### 5.1.5 save Method
 
 ```python
 model.save('name')
@@ -445,7 +486,7 @@ model.save('name', type_to_save='mql5')
 ```
 Done! Now you can use your trained models in Meta Trader 5.
 
-#### 5.1.5 load Method
+#### 5.1.6 load Method
 
 ```python
 model.load('name')
@@ -457,7 +498,7 @@ model.load('name')
 |:---|:---|:---|:---|
 | `name` | str | required | Name of the directory with saved models |
 
-#### 5.1.6 show_train_results Method
+#### 5.1.7 show_train_results Method
 
 ```python
 model.show_train_results()
@@ -466,6 +507,15 @@ model.show_train_results()
 Shows the error plot after training.
 
 ### 5.2 Working with Different Data Sources
+
+#### 5.2.0 get_data() function
+
+```python
+from dquant.get_data import get_data
+
+df = get_data("BTC-USD", start="2020-01-01", end="2023-01-01", interval='1d')
+```
+The data will be received immediately in the required format
 
 #### 5.2.1 Yahoo Finance
 
@@ -767,5 +817,13 @@ SOFTWARE.
 
 ### Version 1.1.3 (2026-04-12)
 - Target value scaling
-- Added r2-score metric
+- Added the r2-score metric
 
+### Version 1.1.4 (2026-05-25)
+- Added walk forward validation
+- Speeded up data preparation
+- Function for retrieving data: get_data()
+
+### Version 1.2.0 (2026-05-31)
+- Training via the QLIKE loss function
+- Added the QLIKE metric

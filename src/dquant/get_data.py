@@ -5,27 +5,25 @@ from datetime import datetime
 
 def get_data(ticker, start, end, interval):
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"} # Заголовок обязателен
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
-    # Параметры для получения данных за последний год с дневным интервалом
     start_ts = int(datetime.strptime(start, "%Y-%m-%d").timestamp())
     end_ts = int(datetime.strptime(end, "%Y-%m-%d").timestamp())
 
     params = {
-        "period1": start_ts,  # Обратите внимание: параметр называется period1, не start
-        "period2": end_ts,  # И period2, не end
+        "period1": start_ts,
+        "period2": end_ts,
         "interval": interval,
         "events": "div,splits",
-        "includePrePost": "false"  # Исключаем pre/post market данные
+        "includePrePost": "false"
     }
 
     response = requests.get(url, headers=headers, params=params)
     data = response.json()
 
-    # Извлечение нужных данных из ответа
     result = data["chart"]["result"][0]
     timestamps = result["timestamp"]
-    quotes = result["indicators"]["quote"][0] # Цены открытия, закрытия, минимумы и т.д.
+    quotes = result["indicators"]["quote"][0]
     df = pd.DataFrame({
         'open': quotes['open'],
         'high': quotes['high'],

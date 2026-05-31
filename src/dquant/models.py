@@ -12,7 +12,8 @@ import numpy as np
 import xgboost
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.metrics import mean_squared_error, r2_score
+from .metrics import qlike_score
 from sklearn.preprocessing import StandardScaler
 from typing import Tuple
 import pandas as pd
@@ -26,6 +27,19 @@ import lightgbm as lgb
 
 
 class FichEn:
+    def qlike_obj(self, y_true, y_pred):
+        y_true = y_true.astype(np.float64)
+        y_pred = y_pred.astype(np.float64)
+        eps = 1e-8
+        y_pred = np.clip(y_pred, eps, None)
+
+        # Градиент (оставляем истинный)
+        grad = 1.0 / y_pred - y_true / (y_pred ** 2)
+
+        hess_approx = 1.0 / (y_pred ** 2)
+
+        return grad, hess_approx
+
     def dquantprint(self, *args, sep=' ', end='\n', file=None, flush=False):
         if self.output == False:
             return
@@ -587,10 +601,13 @@ class FichEn:
 
         self.train_errors = []
         self.val_errors = []
+        self.train_qlike = []
+        self.val_qlike = []
         self.train_r2 = []
         self.val_r2 = []
 
         self.best_val_error = float('inf')
+        self.best_val_qlike = float('inf')
         self.best_r2 = -float('inf')
         self.patience_counter = 0
         self.patience = 3
@@ -602,6 +619,8 @@ class FichEn:
                 self.dquantprint(f'{i} trees')
                 t_error = 0
                 v_error = 0
+                t_qlike = 0
+                v_qlike = 0
                 t_r2 = 0
                 v_r2 = 0
                 if isinstance(horizon, int):
@@ -638,17 +657,23 @@ class FichEn:
                         if i != 1:
                             t_error += mean_squared_error(y_h_clean, self.models[h_idx].predict(X_h))
                             v_error += mean_squared_error(y_h_v_clean, self.models[h_idx].predict(X_h_v))
+                            t_qlike += qlike_score(y_h_clean, self.models[h_idx].predict(X_h))
+                            v_qlike += qlike_score(y_h_v_clean, self.models[h_idx].predict(X_h_v))
                             t_r2 += r2_score(y_h_clean, self.models[h_idx].predict(X_h))
                             v_r2 += r2_score(y_h_v_clean, self.models[h_idx].predict(X_h_v))
                         else:
                             t_error += mean_squared_error(y_h_clean, model.predict(X_h))
                             v_error += mean_squared_error(y_h_v_clean, model.predict(X_h_v))
+                            t_qlike += qlike_score(y_h_clean, model.predict(X_h))
+                            v_qlike += qlike_score(y_h_v_clean, model.predict(X_h_v))
                             t_r2 += r2_score(y_h_clean, model.predict(X_h))
                             v_r2 += r2_score(y_h_v_clean, model.predict(X_h_v))
 
 
                 var_test_error = float(t_error)/horizon
                 var_val_error = float(v_error)/horizon
+                var_test_qlike = float(t_qlike) / horizon
+                var_val_qlike = float(v_qlike) / horizon
                 var_test_r2 = float(t_r2)/horizon
                 var_val_r2 = float(v_r2)/horizon
 
@@ -669,10 +694,14 @@ class FichEn:
 
                 self.train_errors.append(var_test_error)
                 self.val_errors.append(var_val_error)
+                self.train_qlike.append(var_test_qlike)
+                self.val_qlike.append(var_val_qlike)
                 self.train_r2.append(var_test_r2)
                 self.val_r2.append(var_val_r2)
-                self.dquantprint('Train MSE:      ', var_test_error)
-                self.dquantprint('Validation MSE: ', var_val_error)
+                self.dquantprint('Train QLIKE:      ', var_test_qlike)
+                self.dquantprint('Validation QLIKE: ', var_val_qlike)
+                self.dquantprint('Train MSE:        ', var_test_error)
+                self.dquantprint('Validation MSE:   ', var_val_error)
                 self.dquantprint('Train r2:         ', var_test_r2)
                 self.dquantprint('Validation r2:    ', var_val_r2)
                 self.dquantprint(f"Затрачено времени: {time.time() - start} сек")
@@ -1627,7 +1656,7 @@ class VolClustGB(FichEn):
 
 
 class VolClustXGB(FichEn):
-    def __init__(self, sett, early_stopping=True, output=True):
+    def __init__(self, sett, early_stopping=True, output=True, qlike=True):
         self.output = output
         self.models = []
         self.scaler = StandardScaler()
@@ -1637,8 +1666,9 @@ class VolClustXGB(FichEn):
         self.onnx_load = False
         self.early_stopping = early_stopping
         self.V = Visualization('dark')
+        # qlike_obj
         self.default_sett = {
-            'objective': 'reg:squarederror',
+            #'objective': 'reg:squarederror',
             'learning_rate': 0.1,
             'n_estimators': 1,
             'max_depth': 3,
@@ -1646,14 +1676,24 @@ class VolClustXGB(FichEn):
             'subsample': 0.8,
             'random_state': 42
         }
+        if qlike == False:
+            self.default_sett['objective'] = 'reg:squarederror'
+
         self.meta = {
             "model_type": "xgb",
             "model_settings": self.default_sett
         }
         if sett == {}:
-            self.base_model = xgboost.XGBRegressor(**self.default_sett)
+            if qlike:
+                self.base_model = xgboost.XGBRegressor(**self.default_sett, objective=self.qlike_obj)
+            else:
+                self.base_model = xgboost.XGBRegressor(**self.default_sett)
         else:
-            self.base_model = xgboost.XGBRegressor(**sett)
+            del sett['objective']
+            if qlike:
+                self.base_model = xgboost.XGBRegressor(**sett, objective=self.qlike_obj)
+            else:
+                self.base_model = xgboost.XGBRegressor(**sett)
 
 
     def save(self, name, type_to_save='default'):
@@ -1783,7 +1823,7 @@ class VolClustXGB(FichEn):
 
 
 class VolClustLightGBM(FichEn):
-    def __init__(self, sett, early_stopping=True, output=True):
+    def __init__(self, sett, early_stopping=True, output=True, qlike=True):
         self.output = output
         self.models = []
         self.scaler = StandardScaler()
@@ -1794,7 +1834,6 @@ class VolClustLightGBM(FichEn):
         self.early_stopping = early_stopping
         self.V = Visualization('dark')
         self.default_sett = {
-            'objective': 'regression',
             'num_leaves': 7,
             'min_data_in_leaf': 3,
             'min_data_in_bin': 3,
@@ -1802,14 +1841,24 @@ class VolClustLightGBM(FichEn):
             'verbosity': -1,
             'seed': 42
         }
+        if qlike == False:
+            self.default_sett['objective'] = 'regression'
+
         self.meta = {
             "model_type": "lgbm",
             "model_settings": self.default_sett
         }
         if sett == {}:
-            self.base_model = lgb.LGBMRegressor(**self.default_sett)
+            if qlike:
+                self.base_model = lgb.LGBMRegressor(**self.default_sett, objective=self.qlike_obj)
+            else:
+                self.base_model = lgb.LGBMRegressor(**self.default_sett)
         else:
-            self.base_model = lgb.LGBMRegressor(**sett)
+            del sett['objective']
+            if qlike:
+                self.base_model = lgb.LGBMRegressor(**sett, objective=self.qlike_obj)
+            else:
+                self.base_model = lgb.LGBMRegressor(**sett)
 
 
     def save(self, name, type_to_save='default'):
