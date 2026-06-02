@@ -259,7 +259,7 @@ class FichEn:
                         f'Not enough data to calculate BB: max BB period is {len(close_values)} and yours {window}')
                 sma = close_values.mean()
                 std = close_values.std()
-                single_feature_dict[f'bb_{window}'] = (4 * std) / (sma + epsilon)  # упрощено
+                single_feature_dict[f'bb_{window}'] = (4 * std) / (sma + epsilon)
                 single_feature_list_final.append(f'bb_{window}')
 
             elif i[:9] == 'roll_rsi_':
@@ -310,7 +310,7 @@ class FichEn:
                 window = int(window)
                 sma = data['close'].rolling(window=window, min_periods=window).mean()
                 std = data['close'].rolling(window=window, min_periods=window).std()
-                data[f'roll_bb_{window}'] = (4 * std) / (sma + epsilon)  # упрощено
+                data[f'roll_bb_{window}'] = (4 * std) / (sma + epsilon)
                 feature_list_final.append(f'roll_bb_{window}')
 
             else:
@@ -589,8 +589,7 @@ class FichEn:
                     horizon_list = list(range(horizon))
                 else:
                     horizon_list = horizon
-
-                if len(Y_scaled.shape) == 2 and Y_scaled.shape[1] > 1:
+                if len(Y_scaled.shape) == 2 and Y_scaled.shape[1] > 0:
                     for h_idx, h in enumerate(horizon_list):
                         if h_idx >= Y_scaled.shape[1]:
                             self.dquantprint(f"Warning: horizon {h} extends beyond y, skipping")
@@ -705,20 +704,15 @@ class FichEn:
 
             pred_array = np.array(predictions)
 
-            # ИСПРАВЛЕНИЕ ЗДЕСЬ:
             if pred_array.ndim == 1:
-                # Для одного сэмпла с 30 таргетами: (30,) -> (1, 30)
                 pred_array = pred_array.reshape(1, -1)
             elif pred_array.ndim == 2:
                 if pred_array.shape[0] == 1 and pred_array.shape[1] == 30:
-                    # Уже правильно (1, 30) - ничего не делаем
                     pass
                 elif pred_array.shape[0] == 30 and pred_array.shape[1] == 1:
-                    # Неправильная форма (30, 1) -> (1, 30)
                     pred_array = pred_array.T
                 elif pred_array.shape[0] > 1 and pred_array.shape[1] == 30:
-                    # Несколько моделей: (n_models, 30) - берем первую или усредняем
-                    pred_array = pred_array[0:1, :]  # Берем первую модель
+                    pred_array = pred_array[0:1, :]
             predictions = self.scaler_y.inverse_transform(pred_array).flatten()
 
             if show:
@@ -754,20 +748,15 @@ class FichEn:
 
             pred_array = np.array(predictions)
 
-            # ИСПРАВЛЕНИЕ ЗДЕСЬ:
             if pred_array.ndim == 1:
-                # Для одного сэмпла с 30 таргетами: (30,) -> (1, 30)
                 pred_array = pred_array.reshape(1, -1)
             elif pred_array.ndim == 2:
                 if pred_array.shape[0] == 1 and pred_array.shape[1] == 30:
-                    # Уже правильно (1, 30) - ничего не делаем
                     pass
                 elif pred_array.shape[0] == 30 and pred_array.shape[1] == 1:
-                    # Неправильная форма (30, 1) -> (1, 30)
                     pred_array = pred_array.T
                 elif pred_array.shape[0] > 1 and pred_array.shape[1] == 30:
-                    # Несколько моделей: (n_models, 30) - берем первую или усредняем
-                    pred_array = pred_array[0:1, :]  # Берем первую модель
+                    pred_array = pred_array[0:1, :]
             predictions = self.scaler_y.inverse_transform(pred_array).flatten()
 
             if show:
@@ -797,7 +786,6 @@ class FichEn:
         scaler_data = {
             "mean": self.scaler.mean_.tolist() if self.scaler.mean_ is not None else [],
             "std": self.scaler.scale_.tolist() if self.scaler.scale_ is not None else [],
-            # scale_ = стандартное отклонение
             "var": self.scaler.var_.tolist() if self.scaler.var_ is not None else []
         }
         mean_str = ','.join(str(x) for x in scaler_data['mean'])
@@ -806,7 +794,6 @@ class FichEn:
         scaler_data_y = {
             "mean": self.scaler_y.mean_.tolist() if self.scaler_y.mean_ is not None else [],
             "std": self.scaler_y.scale_.tolist() if self.scaler_y.scale_ is not None else [],
-            # scale_ = стандартное отклонение
             "var": self.scaler_y.var_.tolist() if self.scaler_y.var_ is not None else []
         }
         mean_str_y = ','.join(str(x) for x in scaler_data_y['mean'])
@@ -816,12 +803,10 @@ class FichEn:
         os.makedirs(name, exist_ok=True)
         self.dquantprint(f"Directory '{name}' has been created or already exists")
 
-        # 2. Создаём папку для ONNX файлов
         onnx_dir = os.path.join(name, f"{name}_onnx")
         os.makedirs(onnx_dir, exist_ok=True)
 
-        # 3. Создаём основной файл исходного кода MQL5 (.mq5)
-        mq5_file_path = os.path.join(name, f"{name}.mq5")  # Изменено с .mql5 на .mq5
+        mq5_file_path = os.path.join(name, f"{name}.mq5")
         with open(mq5_file_path, "w", encoding="utf-8") as f:
             f.write("//+------------------------------------------------------------------+\n")
             f.write(f"//|                                                  {name}.mq5 |\n")
@@ -876,10 +861,9 @@ class FichEn:
                 f.write(f'   model_handle{i} = OnnxCreateFromBuffer(ExtModelData{i}, ONNX_USE_CPU_ONLY);\n')
                 f.write(f'   if (model_handle{i} == INVALID_HANDLE)\n')
                 f.write('   {\n')
-                f.write(f'      Print("Ошибка загрузки ONNX-модели {i}: ", GetLastError());\n')
+                f.write(f'      Print("Error loading ONNX model {i}: ", GetLastError());\n')
                 f.write('      return INIT_FAILED;\n')
                 f.write('   }\n')
-                # f.write(f'   Print("ONNX-модель {i} успешно загружена");\n\n')
 
             f.write('   return(INIT_SUCCEEDED);\n')
             f.write('}\n\n')
@@ -1381,7 +1365,6 @@ class FichEn:
             f.write('    return true;\n')
             f.write('}\n\n')
 
-            # GetForecast function
             f.write('//+------------------------------------------------------------------+\n')
             f.write('//| Get forecast from ONNX model                                     |\n')
             f.write('//+------------------------------------------------------------------+\n')
@@ -1419,7 +1402,6 @@ class FichEn:
 
         self.dquantprint(f"File {mq5_file_path} created successfully")
 
-        # 4. Создаём файл проекта MQL5 (.mqproj)
         proj_file_path = os.path.join(name, f"{name}.mqproj")
         with open(proj_file_path, "w", encoding="utf-8-sig") as f:
             f.write('{\n')
@@ -1528,7 +1510,6 @@ class VolClustGB(FichEn):
             os.makedirs(onnx_dir, exist_ok=True)
             self.dquantprint(f"Directory for ONNX files created: {onnx_dir}")
 
-            # 4. Сохраняем модели и scaler в поддиректорию
             initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
 
             if hasattr(self, 'scaler') and self.scaler is not None:
@@ -1628,7 +1609,6 @@ class VolClustXGB(FichEn):
         self.onnx_load = False
         self.early_stopping = early_stopping
         self.V = Visualization('dark')
-        # qlike_obj
         self.default_sett = {
             'learning_rate': 0.1,
             'max_depth': 6,
@@ -1705,7 +1685,6 @@ class VolClustXGB(FichEn):
             os.makedirs(onnx_dir, exist_ok=True)
             self.dquantprint(f"Directory for ONNX files created: {onnx_dir}")
 
-            # 4. Сохраняем модели и scaler в поддиректорию
             initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
 
             if hasattr(self, 'scaler') and self.scaler is not None:
@@ -1790,6 +1769,167 @@ class VolClustXGB(FichEn):
             self.loaded_models.append(session)
 
         self.onnx_load = True
+
+
+class VolClustLightGBM(FichEn):
+    def __init__(self, sett, early_stopping=True, output=True, qlike=True):
+        self.output = output
+        self.models = []
+        self.scaler = StandardScaler()
+        self.scaler_y = StandardScaler()
+        self.X_shape = 0
+        self.is_fitted = False
+        self.onnx_load = False
+        self.early_stopping = early_stopping
+        self.V = Visualization('dark')
+        self.default_sett = {
+            'learning_rate': 0.1,
+            'max_depth': 6,
+            'num_leaves': 2**6 - 1,
+            'min_child_samples': 5,
+            'min_split_gain': 0.1,
+            'bagging_fraction': 0.8,
+            'bagging_freq': 1,
+            'feature_fraction': 0.8,
+            'reg_alpha': 0.0,
+            'reg_lambda': 1.0,
+            'random_state': 42,
+            'verbosity': -1,
+            'boosting_type': 'gbdt'
+        }
+
+        if qlike == False:
+            self.default_sett['objective'] = 'regression'
+
+        self.meta = {
+            "model_type": "lgbm",
+            "model_settings": self.default_sett
+        }
+        if sett == {}:
+            if qlike:
+                self.base_model = lgb.LGBMRegressor(**self.default_sett, objective=self.qlike_obj)
+            else:
+                self.base_model = lgb.LGBMRegressor(**self.default_sett)
+        else:
+            try:
+                if sett['objective']: del sett['objective']
+            except KeyError:
+                pass
+            if qlike:
+                self.base_model = lgb.LGBMRegressor(**sett, objective=self.qlike_obj)
+            else:
+                self.base_model = lgb.LGBMRegressor(**sett)
+
+
+    def save(self, name, type_to_save='default'):
+        if type_to_save == 'default':
+            os.makedirs(name, exist_ok=True)
+            initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
+
+            file_path = os.path.join(name, f"{name}_features.json")
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(self.feature_list, f, ensure_ascii=False, indent=2)
+
+            self.meta = {
+                "model_type": "lgbm",
+                "model_settings": self.default_sett,
+                "input_bars": self.input_bars,
+                "horizon": self.horizon,
+                "trees_count": self.trees_count,
+            }
+            file_path = os.path.join(name, f"{name}_model_settings.json")
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(self.meta, f, ensure_ascii=False, indent=2)
+
+            if hasattr(self, 'scaler'):
+                scaler_path = os.path.join(name, f"{name}_scaler.pkl")
+                joblib.dump(self.scaler, scaler_path)
+
+            if hasattr(self, 'scaler_y'):
+                scaler_path = os.path.join(name, f"{name}_scaler_y.pkl")
+                joblib.dump(self.scaler_y, scaler_path)
+
+            for i in range(len(self.models)):
+                onx = onnxmltools.convert_lightgbm(self.models[i], initial_types=initial_type, zipmap=False,
+                                                   target_opset=12)
+                file_path = os.path.join(name, f"{name}_{i}.onnx")
+                onnxmltools.utils.save_model(onx, file_path)
+        elif type_to_save == 'mql5':
+            self.save_mql5(name)
+            onnx_dir = os.path.join(name, f"{name}_onnx")
+            os.makedirs(onnx_dir, exist_ok=True)
+            self.dquantprint(f"Directory for ONNX files created: {onnx_dir}")
+
+            initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
+
+            if hasattr(self, 'scaler') and self.scaler is not None:
+                scaler_path = os.path.join(onnx_dir, f"{name}_scaler.pkl")
+                joblib.dump(self.scaler, scaler_path)
+                self.dquantprint(f"Scaler is saved in {scaler_path}")
+
+            if hasattr(self, 'scaler_y') and self.scaler_y is not None:
+                scaler_path = os.path.join(onnx_dir, f"{name}_scaler_y.pkl")
+                joblib.dump(self.scaler_y, scaler_path)
+                self.dquantprint(f"Scalery is saved in {scaler_path}")
+
+            for i in range(len(self.models)):
+                onx = onnxmltools.convert_lightgbm(self.models[i], initial_types=initial_type, zipmap=False,
+                                                   target_opset=12)
+                file_path = os.path.join(onnx_dir, f"{name}_{i}.onnx")
+                onnxmltools.utils.save_model(onx, file_path)
+                self.dquantprint(f"Model {i} is saved in {file_path}")
+
+            self.dquantprint(f"All operations in directory '{name}' completed successfully!")
+
+
+    def load(self, name):
+        self.loaded_models = []
+
+        if not os.path.exists(name):
+            raise FileNotFoundError(f"Directory {name} not found")
+
+        try:
+            file_path = os.path.join(name, f"{name}_features.json")
+            with open(file_path, 'r', encoding='utf-8') as f:
+                self.feature_list = json.load(f)
+        except FileNotFoundError:
+            self.dquantprint(f'Model {name} is not valid, file {name}_features.json is not found')
+            return
+
+        try:
+            file_path = os.path.join(name, f"{name}_model_settings.json")
+            with open(file_path, 'r', encoding='utf-8') as f:
+                self.meta = json.load(f)
+        except FileNotFoundError:
+            self.dquantprint(f'Model {name} is not valid, file {name}_model_settings.json is not found')
+            return
+
+        if self.meta['model_type'] != 'lgbm':
+            raise ValueError(f"Wrong model type, expected lgbm and not a {self.meta['model_type']}")
+
+        scaler_files = [f for f in os.listdir(name) if f.endswith('_scaler.pkl')]
+        if scaler_files:
+            scaler_path = os.path.join(name, scaler_files[0])
+            self.scaler = joblib.load(scaler_path)
+
+        scaler_files = [f for f in os.listdir(name) if f.endswith('_scaler_y.pkl')]
+        if scaler_files:
+            scaler_path = os.path.join(name, scaler_files[0])
+            self.scaler_y = joblib.load(scaler_path)
+
+        model_files = [f for f in os.listdir(name) if f.endswith('.onnx')]
+
+        if not model_files:
+            raise FileNotFoundError(f"No .onnx files found in directory {name}")
+
+        model_files.sort()
+        ml = len(model_files)
+        numbers = {}
+        for f in model_files:
+            match = re.search(r'_(\d+)\.onnx$', f)
+            if match:
+                num = int(match.group(1))
+                numbers[num] = f
 
         model_files = []
         for i in range(ml):

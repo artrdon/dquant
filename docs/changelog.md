@@ -31,3 +31,7 @@
 ### Version 1.2.0 (2026-05-31)
 - Training via the QLIKE loss function
 - Added the QLIKE metric
+
+### Version 1.2.1 (2026-06-02)
+- Fully English version
+- Fixed a bug in custom hyperparameters
