@@ -33,7 +33,6 @@ class FichEn:
         eps = 1e-8
         y_pred = np.clip(y_pred, eps, None)
 
-        # Градиент (оставляем истинный)
         grad = 1.0 / y_pred - y_true / (y_pred ** 2)
 
         hess_approx = 1.0 / (y_pred ** 2)
@@ -44,16 +43,13 @@ class FichEn:
         if self.output == False:
             return
         if file is None:
-            file = sys.stdout  # по умолчанию вывод в консоль
+            file = sys.stdout
 
-        # Преобразуем все аргументы в строки и соединяем через sep
         output = sep.join(str(arg) for arg in args)
-        output += end  # добавляем завершающий символ
+        output += end
 
-        # Записываем в файловый объект
         file.write(output)
 
-        # Принудительно сбрасываем буфер, если нужно
         if flush:
             file.flush()
 
@@ -71,7 +67,7 @@ class FichEn:
 
         for col in required:
             if col not in data.columns:
-                raise ValueError(f"Колонка '{col}' не найдена")
+                raise ValueError(f"Column '{col}' is not found")
 
         raw_windows_X = []
         raw_windows_y = []
@@ -95,13 +91,12 @@ class FichEn:
 
         for col in required:
             if col not in data.columns:
-                raise ValueError(f"Колонка '{col}' не найдена")
+                raise ValueError(f"Column '{col}' is not found")
 
         feature_list_final = []
         single_feature_list_final = []
         single_feature_dict = {}
 
-        # Сначала рассчитываем TR, так как он нужен для ATR
         if 'TR' in feature_list or any(f.startswith('atr_') for f in feature_list) or any(
                 f.startswith('roll_atr_') for f in feature_list):
             prev_close = data['close'].shift(1).fillna(data['close'])
@@ -145,7 +140,6 @@ class FichEn:
                 feature_list_final.append(i)
 
             elif i == 'abs_returns':
-                # Используем уже рассчитанные returns
                 if 'returns' in data.columns:
                     data[i] = data['returns'].abs()
                 else:
@@ -327,14 +321,6 @@ class FichEn:
 
         data = data.fillna(0)
 
-        """feature_vector = []
-        for i in range(1, len(data)):
-            for feat in existing_features:
-                feature_vector.append(data[feat].iloc[i])
-
-        for i in single_feature_list_final:
-            feature_vector.append(single_feature_dict[i])"""
-
         feature_vector = data[existing_features].iloc[1:].to_numpy(dtype=np.float64).ravel()
         single_vals = np.array([single_feature_dict[f] for f in single_feature_list_final], dtype=np.float64)
         feature_vector = np.concatenate([feature_vector, single_vals])
@@ -352,20 +338,7 @@ class FichEn:
 
         for col in required:
             if col not in data.columns:
-                raise ValueError(f"Колонка '{col}' не найдена")
-
-        """tr_values = []
-
-        for i in range(1, len(data)):
-            if i == 0:
-                tr = (data['high'].iloc[i] - data['low'].iloc[i]) / data['close'].iloc[i]
-            else:
-                hl = data['high'].iloc[i] - data['low'].iloc[i]
-                hc = abs(data['high'].iloc[i] - data['close'].iloc[i - 1])
-                lc = abs(data['low'].iloc[i] - data['close'].iloc[i - 1])
-                tr = max(hl/data['close'].iloc[i], hc/data['close'].iloc[i], lc/data['close'].iloc[i])
-
-            tr_values.append(tr)"""
+                raise ValueError(f"Column '{col}' is not found")
 
         high = data['high']
         low = data['low']
@@ -419,35 +392,32 @@ class FichEn:
             bar = '█' * filled_chars + '░' * (50 - filled_chars)
             time_per = time.time() - startt
             if percent < 10:
-                self.dquantprint(f'\rПодготовка данных: |{bar}|   {percent:.2f}%  Осталось {time_per*(lx-i):.2f} секунд', end='', flush=True)
+                self.dquantprint(f'\rData preparation: |{bar}|   {percent:.2f}%  {time_per*(lx-i):.2f} seconds left', end='', flush=True)
             elif percent >= 10 and percent < 100:
-                self.dquantprint(f'\rПодготовка данных: |{bar}|  {percent:.2f}%   Осталось {time_per*(lx-i):.2f} секунд', end='', flush=True)
+                self.dquantprint(f'\rData preparation: |{bar}|  {percent:.2f}%   {time_per*(lx-i):.2f} seconds left', end='', flush=True)
             else:
-                self.dquantprint(f'\rПодготовка данных: |{bar}| {percent:.2f}%    Осталось {time_per*(lx-i):.2f} секунд', end='', flush=True)
+                self.dquantprint(f'\rData preparation: |{bar}| {percent:.2f}%    {time_per*(lx-i):.2f} seconds left', end='', flush=True)
 
         self.dquantprint()
         x = np.array(XX)
         y = np.array(YY)
 
-        # Параметры фиксированного окна h
-        train_window_size = input_bars  # сколько последних окон использовать для обучения
-        # Минимальный индекс, с которого можно начинать валидацию (должен быть >= train_window_size)
+        train_window_size = input_bars
         start_val_idx = train_window_size
 
         total_iterations = len(x) - start_val_idx
         if total_iterations <= 0:
-            raise ValueError(f"Слишком мало данных: всего окон {len(x)}, а train_window_size={train_window_size}")
+            raise ValueError(f"Too little data: total windows {len(x)}, and train_window_size={train_window_size}")
 
-        self.dquantprint(f"Всего окон: {len(x)}")
-        self.dquantprint(f"Размер окна обучения: {train_window_size}")
-        self.dquantprint(f"Шагов валидации: {total_iterations}")
+        self.dquantprint(f"Total windows: {len(x)}")
+        self.dquantprint(f"Training window size: {train_window_size}")
+        self.dquantprint(f"Validation steps: {total_iterations}")
 
         all_train_errors = []
         all_val_errors = []
         all_train_r2 = []
         all_val_r2 = []
 
-        # horizon может быть числом или списком, приведём к списку индексов
         if isinstance(horizon, int):
             horizon_list = list(range(horizon))
         else:
@@ -457,16 +427,15 @@ class FichEn:
             start_it = time.time()
             iter_num = val_idx - start_val_idx + 1
 
-            # === Обучающая выборка: последние train_window_size окон перед val_idx ===
             train_indices = list(range(val_idx - train_window_size, val_idx))
             X_train = x[train_indices]
             y_train = y[train_indices]
 
-            # === Валидационное окно (одно) ===
-            X_val = x[val_idx:val_idx + 1]  # форма (1, n_features)
-            y_val_true = y[val_idx]  # форма (horizon,)
+            # === Validation window ===
+            X_val = x[val_idx:val_idx + 1]  # form (1, n_features)
+            y_val_true = y[val_idx]  # form (horizon,)
 
-            # === Нормализация (обучаем scaler ТОЛЬКО на тренировочных данных) ===
+            # === Normalization ===
             scaler_X = StandardScaler()
             scaler_y_local = StandardScaler()
 
@@ -475,46 +444,40 @@ class FichEn:
 
             X_val_scaled = scaler_X.transform(X_val)
 
-            # === Обучение моделей для каждого горизонта ===
+            # === training for each horizon ===
             model_ex = self.base_model.__class__(**self.base_model.get_params())
             model_ex.set_params(n_estimators=trees)
             models_temp = []
             for h_idx in horizon_list:
                 if h_idx >= y_train_scaled.shape[1]:
-                    continue  # на всякий случай, если горизонт больше доступного
+                    continue
 
                 y_h = y_train_scaled[:, h_idx]
 
-                # Создаём модель с параметрами, как у self.base_model
                 model = model_ex
-                # При желании можно задать n_estimators из self.trees_count, но для чистоты
-                # walk-forward оставим обучение до конца (или фиксированное число деревьев).
-                # Если нужен early_stopping по числу деревьев - можно добавить.
                 model.fit(X_train_scaled, y_h)
                 models_temp.append(model)
 
-            # === Предсказания ===
-            # На тренировочных данных
+            # === Foracesting train ===
             train_preds_list = []
             for model in models_temp:
                 train_preds_list.append(model.predict(X_train_scaled))
             train_preds = np.column_stack(train_preds_list)  # (train_windows, horizon)
 
-            # На валидационном окне
+            # Forecasting on validation data
             val_preds_list = []
             for model in models_temp:
                 val_preds_list.append(model.predict(X_val_scaled))
             val_preds = np.array(val_preds_list).flatten()  # (horizon,)
 
-            # === Обратное масштабирование для расчёта метрик в исходных единицах ===
+
             y_train_inv = scaler_y_local.inverse_transform(y_train_scaled)
             train_preds_inv = scaler_y_local.inverse_transform(train_preds)
 
-            y_val_true_inv = y_val_true  # уже в исходных единицах
+            y_val_true_inv = y_val_true
             val_preds_inv = scaler_y_local.inverse_transform(val_preds.reshape(1, -1)).flatten()
 
-            # === Метрики ===
-            # Усредняем MSE по всем горизонтам
+            # === Metrics ===
             train_error = mean_squared_error(y_train_inv.flatten(), train_preds_inv.flatten())
             val_error = mean_squared_error(y_val_true_inv, val_preds_inv)
             train_r2 = r2_score(y_train_inv.flatten(), train_preds_inv.flatten())
@@ -525,7 +488,7 @@ class FichEn:
             all_train_r2.append(train_r2)
             all_val_r2.append(val_r2)
 
-            # === Прогресс-бар ===
+            # === Progress bar ===
             percent = (iter_num / total_iterations) * 100
             filled = int(percent / 2)
             bar = '█' * filled + '░' * (50 - filled)
@@ -533,11 +496,11 @@ class FichEn:
                 f'\rWalk-Forward: |{bar}| {percent:.1f}% - Iteration {iter_num}/{total_iterations} - Val MSE: {val_error:.6f} - need time: {(time.time()-start_it)*(total_iterations-iter_num)} seconds',
                 end='', flush=True)
 
-        #self.dquantprint("\nWalk-Forward валидация завершена!")
-        self.dquantprint(f"Средняя ошибка валидации (MSE): {np.mean(all_val_errors):.6f} +/- {np.std(all_val_errors):.6f}")
-        self.dquantprint(f"Средний R² валидации: {np.mean(all_val_r2):.4f} +/- {np.std(all_val_r2):.4f}")
-        self.dquantprint(f"Максимальная ошибка валидации: {np.max(all_val_errors):.6f}")
-        self.dquantprint(f"Минимальная ошибка валидации: {np.min(all_val_errors):.6f}")
+
+        self.dquantprint(f"Mean validation error (MSE): {np.mean(all_val_errors):.6f} +/- {np.std(all_val_errors):.6f}")
+        self.dquantprint(f"Mean validation R²: {np.mean(all_val_r2):.4f} +/- {np.std(all_val_r2):.4f}")
+        self.dquantprint(f"Maximum validation error: {np.max(all_val_errors):.6f}")
+        self.dquantprint(f"Minimum validation error: {np.min(all_val_errors):.6f}")
         if show_results:
             self.V.forward_validation_errors(all_val_errors, all_val_r2)
         return
@@ -571,7 +534,6 @@ class FichEn:
             else:
                 window_targets = target_func(y[i])
 
-            #self.dquantprint(len(window_features))
             XX.append(window_features)
             YY.append(window_targets)
 
@@ -580,11 +542,11 @@ class FichEn:
             bar = '█' * filled_chars + '░' * (50 - filled_chars)
             time_per = time.time() - startt
             if percent < 10:
-                self.dquantprint(f'\rПодготовка данных: |{bar}|   {percent:.2f}%  Осталось {time_per*(lx-i):.2f} секунд', end='', flush=True)
+                self.dquantprint(f'\rData preparation: |{bar}|   {percent:.2f}%  {time_per*(lx-i):.2f} seconds left', end='', flush=True)
             elif percent >= 10 and percent < 100:
-                self.dquantprint(f'\rПодготовка данных: |{bar}|  {percent:.2f}%   Осталось {time_per*(lx-i):.2f} секунд', end='', flush=True)
+                self.dquantprint(f'\rData preparation: |{bar}|  {percent:.2f}%   {time_per*(lx-i):.2f} seconds left', end='', flush=True)
             else:
-                self.dquantprint(f'\rПодготовка данных: |{bar}| {percent:.2f}%    Осталось {time_per*(lx-i):.2f} секунд', end='', flush=True)
+                self.dquantprint(f'\rData preparation: |{bar}| {percent:.2f}%    {time_per*(lx-i):.2f} seconds left', end='', flush=True)
 
         self.dquantprint()
         self.dquantprint("time spended: ", time.time() - start_)
@@ -631,7 +593,7 @@ class FichEn:
                 if len(Y_scaled.shape) == 2 and Y_scaled.shape[1] > 1:
                     for h_idx, h in enumerate(horizon_list):
                         if h_idx >= Y_scaled.shape[1]:
-                            self.dquantprint(f"Предупреждение: горизонт {h} выходит за пределы y, пропускаем")
+                            self.dquantprint(f"Warning: horizon {h} extends beyond y, skipping")
                             continue
 
                         y_h = Y_scaled.iloc[:, h_idx] if hasattr(Y_scaled, 'iloc') else Y_scaled[:, h_idx]
@@ -704,10 +666,10 @@ class FichEn:
                 self.dquantprint('Validation MSE:   ', var_val_error)
                 self.dquantprint('Train r2:         ', var_test_r2)
                 self.dquantprint('Validation r2:    ', var_val_r2)
-                self.dquantprint(f"Затрачено времени: {time.time() - start} сек")
+                self.dquantprint(f"{time.time() - start} seconds spent")
 
         except KeyboardInterrupt:
-            self.dquantprint("\nОбучение прервано по Ctrl+C!")
+            self.dquantprint("\nTraining interrupted by Ctrl+C!")
 
         if show_results:
             self.V.show_errors(self.train_errors, self.val_errors, self.train_r2, self.val_r2)
@@ -724,7 +686,7 @@ class FichEn:
             X = feature_func(latest_data)
 
         if not self.is_fitted and not self.onnx_load:
-            raise ValueError("Модель еще не обучена!")
+            raise ValueError("The model is not trained yet!")
 
         if self.onnx_load:
             predictions = []
@@ -852,7 +814,7 @@ class FichEn:
 
 
         os.makedirs(name, exist_ok=True)
-        self.dquantprint(f"Директория '{name}' создана или уже существует")
+        self.dquantprint(f"Directory '{name}' has been created or already exists")
 
         # 2. Создаём папку для ONNX файлов
         onnx_dir = os.path.join(name, f"{name}_onnx")
@@ -1455,7 +1417,7 @@ class FichEn:
             f.write('   }\n')
             f.write('}\n\n')
 
-        self.dquantprint(f"Файл {mq5_file_path} успешно создан")
+        self.dquantprint(f"File {mq5_file_path} created successfully")
 
         # 4. Создаём файл проекта MQL5 (.mqproj)
         proj_file_path = os.path.join(name, f"{name}.mqproj")
@@ -1490,7 +1452,7 @@ class FichEn:
             f.write('  ]\n')
             f.write('}\n')
 
-        self.dquantprint(f"Файл {proj_file_path} успешно создан")
+        self.dquantprint(f"File {proj_file_path} created successfully")
 
 
 
@@ -1564,7 +1526,7 @@ class VolClustGB(FichEn):
             self.save_mql5(name)
             onnx_dir = os.path.join(name, f"{name}_onnx")
             os.makedirs(onnx_dir, exist_ok=True)
-            self.dquantprint(f"Директория для ONNX файлов создана: {onnx_dir}")
+            self.dquantprint(f"Directory for ONNX files created: {onnx_dir}")
 
             # 4. Сохраняем модели и scaler в поддиректорию
             initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
@@ -1572,28 +1534,28 @@ class VolClustGB(FichEn):
             if hasattr(self, 'scaler') and self.scaler is not None:
                 scaler_path = os.path.join(onnx_dir, f"{name}_scaler.pkl")
                 joblib.dump(self.scaler, scaler_path)
-                self.dquantprint(f"Scaler сохранён в {scaler_path}")
+                self.dquantprint(f"Scaler is saved in {scaler_path}")
 
             if hasattr(self, 'scaler_y') and self.scaler_y is not None:
                 scaler_path = os.path.join(onnx_dir, f"{name}_scaler_y.pkl")
                 joblib.dump(self.scaler_y, scaler_path)
-                self.dquantprint(f"Scalery сохранён в {scaler_path}")
+                self.dquantprint(f"Scalery is saved in {scaler_path}")
 
             for i in range(len(self.models)):
                 onx = convert_sklearn(self.models[i], initial_types=initial_type, target_opset=12)
                 file_path = os.path.join(onnx_dir, f"{name}_{i}.onnx")
                 with open(file_path, "wb") as f:
                     f.write(onx.SerializeToString())
-                self.dquantprint(f"Модель {i} сохранена в {file_path}")
+                self.dquantprint(f"Model {i} is saved in {file_path}")
 
-            self.dquantprint(f"Все операции в директории '{name}' успешно завершены!")
+            self.dquantprint(f"All operations in directory '{name}' completed successfully!")
 
 
     def load(self, name):
         self.loaded_models = []
 
         if not os.path.exists(name):
-            raise FileNotFoundError(f"Папка {name} не найдена")
+            raise FileNotFoundError(f"Directory {name} not found")
 
         try:
             file_path = os.path.join(name, f"{name}_features.json")
@@ -1627,7 +1589,7 @@ class VolClustGB(FichEn):
         model_files = [f for f in os.listdir(name) if f.endswith('.onnx')]
 
         if not model_files:
-            raise FileNotFoundError(f"В папке {name} не найдено .onnx файлов")
+            raise FileNotFoundError(f"No .onnx files found in directory {name}")
 
         model_files.sort()
         ml = len(model_files)
@@ -1668,14 +1630,19 @@ class VolClustXGB(FichEn):
         self.V = Visualization('dark')
         # qlike_obj
         self.default_sett = {
-            #'objective': 'reg:squarederror',
             'learning_rate': 0.1,
-            'n_estimators': 1,
-            'max_depth': 3,
+            'max_depth': 6,
             'min_child_weight': 5,
+            'gamma': 0.1,
             'subsample': 0.8,
-            'random_state': 42
+            'colsample_bytree': 0.8,
+            'reg_alpha': 0.0,
+            'reg_lambda': 1.0,
+            'random_state': 42,
+            'tree_method': 'hist',
+            'device': 'cpu'
         }
+
         if qlike == False:
             self.default_sett['objective'] = 'reg:squarederror'
 
@@ -1689,7 +1656,10 @@ class VolClustXGB(FichEn):
             else:
                 self.base_model = xgboost.XGBRegressor(**self.default_sett)
         else:
-            del sett['objective']
+            try:
+                if sett['objective']: del sett['objective']
+            except KeyError:
+                pass
             if qlike:
                 self.base_model = xgboost.XGBRegressor(**sett, objective=self.qlike_obj)
             else:
@@ -1733,7 +1703,7 @@ class VolClustXGB(FichEn):
             self.save_mql5(name)
             onnx_dir = os.path.join(name, f"{name}_onnx")
             os.makedirs(onnx_dir, exist_ok=True)
-            self.dquantprint(f"Директория для ONNX файлов создана: {onnx_dir}")
+            self.dquantprint(f"Directory for ONNX files created: {onnx_dir}")
 
             # 4. Сохраняем модели и scaler в поддиректорию
             initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
@@ -1741,20 +1711,20 @@ class VolClustXGB(FichEn):
             if hasattr(self, 'scaler') and self.scaler is not None:
                 scaler_path = os.path.join(onnx_dir, f"{name}_scaler.pkl")
                 joblib.dump(self.scaler, scaler_path)
-                self.dquantprint(f"Scaler сохранён в {scaler_path}")
+                self.dquantprint(f"Scaler is saved in {scaler_path}")
 
             if hasattr(self, 'scaler_y') and self.scaler_y is not None:
                 scaler_path = os.path.join(onnx_dir, f"{name}_scaler_y.pkl")
                 joblib.dump(self.scaler_y, scaler_path)
-                self.dquantprint(f"Scalery сохранён в {scaler_path}")
+                self.dquantprint(f"Scalery is saved in {scaler_path}")
 
             for i in range(len(self.models)):
                 onx = onnxmltools.convert_xgboost(self.models[i], initial_types=initial_type, target_opset=9)
                 model_path = os.path.join(onnx_dir, f"{name}_{i}.onnx")
                 onnxmltools.utils.save_model(onx, model_path)
-                self.dquantprint(f"Модель {i} сохранена в {model_path}")
+                self.dquantprint(f"Model {i} is saved in {model_path}")
 
-            self.dquantprint(f"Все операции в директории '{name}' успешно завершены!")
+            self.dquantprint(f"All operations in directory '{name}' completed successfully!")
 
 
 
@@ -1762,7 +1732,7 @@ class VolClustXGB(FichEn):
         self.loaded_models = []
 
         if not os.path.exists(name):
-            raise FileNotFoundError(f"Папка {name} не найдена")
+            raise FileNotFoundError(f"Directory {name} not found")
 
         try:
             file_path = os.path.join(name, f"{name}_features.json")
@@ -1796,7 +1766,7 @@ class VolClustXGB(FichEn):
         model_files = [f for f in os.listdir(name) if f.endswith('.onnx')]
 
         if not model_files:
-            raise FileNotFoundError(f"В папке {name} не найдено .onnx файлов")
+            raise FileNotFoundError(f"No .onnx files found in directory {name}")
 
         model_files.sort()
         ml = len(model_files)
@@ -1821,157 +1791,6 @@ class VolClustXGB(FichEn):
 
         self.onnx_load = True
 
-
-class VolClustLightGBM(FichEn):
-    def __init__(self, sett, early_stopping=True, output=True, qlike=True):
-        self.output = output
-        self.models = []
-        self.scaler = StandardScaler()
-        self.scaler_y = StandardScaler()
-        self.X_shape = 0
-        self.is_fitted = False
-        self.onnx_load = False
-        self.early_stopping = early_stopping
-        self.V = Visualization('dark')
-        self.default_sett = {
-            'num_leaves': 7,
-            'min_data_in_leaf': 3,
-            'min_data_in_bin': 3,
-            'learning_rate': 0.1,
-            'verbosity': -1,
-            'seed': 42
-        }
-        if qlike == False:
-            self.default_sett['objective'] = 'regression'
-
-        self.meta = {
-            "model_type": "lgbm",
-            "model_settings": self.default_sett
-        }
-        if sett == {}:
-            if qlike:
-                self.base_model = lgb.LGBMRegressor(**self.default_sett, objective=self.qlike_obj)
-            else:
-                self.base_model = lgb.LGBMRegressor(**self.default_sett)
-        else:
-            del sett['objective']
-            if qlike:
-                self.base_model = lgb.LGBMRegressor(**sett, objective=self.qlike_obj)
-            else:
-                self.base_model = lgb.LGBMRegressor(**sett)
-
-
-    def save(self, name, type_to_save='default'):
-        if type_to_save == 'default':
-            os.makedirs(name, exist_ok=True)
-            initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
-
-            file_path = os.path.join(name, f"{name}_features.json")
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(self.feature_list, f, ensure_ascii=False, indent=2)
-
-            self.meta = {
-                "model_type": "lgbm",
-                "model_settings": self.default_sett,
-                "input_bars": self.input_bars,
-                "horizon": self.horizon,
-                "trees_count": self.trees_count,
-            }
-            file_path = os.path.join(name, f"{name}_model_settings.json")
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(self.meta, f, ensure_ascii=False, indent=2)
-
-            if hasattr(self, 'scaler'):
-                scaler_path = os.path.join(name, f"{name}_scaler.pkl")
-                joblib.dump(self.scaler, scaler_path)
-
-            if hasattr(self, 'scaler_y'):
-                scaler_path = os.path.join(name, f"{name}_scaler_y.pkl")
-                joblib.dump(self.scaler_y, scaler_path)
-
-            for i in range(len(self.models)):
-                onx = onnxmltools.convert_lightgbm(self.models[i], initial_types=initial_type, zipmap=False,
-                                                   target_opset=12)
-                file_path = os.path.join(name, f"{name}_{i}.onnx")
-                onnxmltools.utils.save_model(onx, file_path)
-        elif type_to_save == 'mql5':
-            self.save_mql5(name)
-            onnx_dir = os.path.join(name, f"{name}_onnx")
-            os.makedirs(onnx_dir, exist_ok=True)
-            self.dquantprint(f"Директория для ONNX файлов создана: {onnx_dir}")
-
-            # 4. Сохраняем модели и scaler в поддиректорию
-            initial_type = [('float_input', FloatTensorType([None, self.X_shape]))]
-
-            if hasattr(self, 'scaler') and self.scaler is not None:
-                scaler_path = os.path.join(onnx_dir, f"{name}_scaler.pkl")
-                joblib.dump(self.scaler, scaler_path)
-                self.dquantprint(f"Scaler сохранён в {scaler_path}")
-
-            if hasattr(self, 'scaler_y') and self.scaler_y is not None:
-                scaler_path = os.path.join(onnx_dir, f"{name}_scaler_y.pkl")
-                joblib.dump(self.scaler_y, scaler_path)
-                self.dquantprint(f"Scalery сохранён в {scaler_path}")
-
-            for i in range(len(self.models)):
-                onx = onnxmltools.convert_lightgbm(self.models[i], initial_types=initial_type, zipmap=False,
-                                                   target_opset=12)
-                file_path = os.path.join(onnx_dir, f"{name}_{i}.onnx")
-                onnxmltools.utils.save_model(onx, file_path)
-                self.dquantprint(f"Модель {i} сохранена в {file_path}")
-
-            self.dquantprint(f"Все операции в директории '{name}' успешно завершены!")
-
-
-    def load(self, name):
-        self.loaded_models = []
-
-        if not os.path.exists(name):
-            raise FileNotFoundError(f"Папка {name} не найдена")
-
-        try:
-            file_path = os.path.join(name, f"{name}_features.json")
-            with open(file_path, 'r', encoding='utf-8') as f:
-                self.feature_list = json.load(f)
-        except FileNotFoundError:
-            self.dquantprint(f'Model {name} is not valid, file {name}_features.json is not found')
-            return
-
-        try:
-            file_path = os.path.join(name, f"{name}_model_settings.json")
-            with open(file_path, 'r', encoding='utf-8') as f:
-                self.meta = json.load(f)
-        except FileNotFoundError:
-            self.dquantprint(f'Model {name} is not valid, file {name}_model_settings.json is not found')
-            return
-
-        if self.meta['model_type'] != 'lgbm':
-            raise ValueError(f"Wrong model type, expected lgbm and not a {self.meta['model_type']}")
-
-        scaler_files = [f for f in os.listdir(name) if f.endswith('_scaler.pkl')]
-        if scaler_files:
-            scaler_path = os.path.join(name, scaler_files[0])
-            self.scaler = joblib.load(scaler_path)
-
-        scaler_files = [f for f in os.listdir(name) if f.endswith('_scaler_y.pkl')]
-        if scaler_files:
-            scaler_path = os.path.join(name, scaler_files[0])
-            self.scaler_y = joblib.load(scaler_path)
-
-        model_files = [f for f in os.listdir(name) if f.endswith('.onnx')]
-
-        if not model_files:
-            raise FileNotFoundError(f"В папке {name} не найдено .onnx файлов")
-
-        model_files.sort()
-        ml = len(model_files)
-        numbers = {}
-        for f in model_files:
-            match = re.search(r'_(\d+)\.onnx$', f)
-            if match:
-                num = int(match.group(1))
-                numbers[num] = f
-
         model_files = []
         for i in range(ml):
             model_files.append(numbers[i])
@@ -1985,170 +1804,3 @@ class VolClustLightGBM(FichEn):
             self.loaded_models.append(session)
 
         self.onnx_load = True
-
-
-"""
-time spended:  65.44393944740295
-[ 1.00901477e-02  6.06840734e-03  7.89991808e-03  2.40415813e-03
-  1.30973943e-04  2.53802438e-03  7.55212328e-03  6.40525625e-01
-  0.00000000e+00  2.81739978e-02  1.71405577e-02  7.20318643e-03
-  2.66850655e-02  1.37758612e-05  2.63183893e-02  1.85560851e-03
-  9.53905366e-01  0.00000000e+00  4.29736387e-02  2.55626153e-02
-  2.36549673e-02  2.80319922e-02 -3.03892649e-04  2.81246929e-02
-  1.48489457e-02  2.72801986e-01  0.00000000e+00  3.72218795e-02
-  2.20329899e-02  1.21903154e-02  3.24872375e-02  1.21786687e-04
-  3.31424959e-02  4.07938359e-03  1.05498777e-01  0.00000000e+00
-  7.37316373e-02  4.32737643e-02  3.21723278e-02  5.74076879e-02
- -3.87169703e-04  5.87003299e-02  1.50313074e-02  1.78512223e-01
-  0.00000000e+00  4.04910463e-02  2.44025016e-02  2.97286458e-02
-  4.09296639e-03  5.20381594e-04  4.62173561e-03  3.58693107e-02
-  5.82791094e-01  0.00000000e+00  4.58374744e-02  2.74720640e-02
-  3.16518085e-02  1.28362178e-02  4.88255628e-04  1.34072113e-02
-  3.24302631e-02  4.51602205e-01  0.00000000e+00  2.04805939e-02
-  1.21755897e-02  1.55781241e-02  8.44683596e-03 -1.44448658e-04
-  8.33816248e-03  1.21424314e-02  0.00000000e+00  0.00000000e+00
-  2.98493845e-02  1.78514990e-02  2.09793890e-02  4.31824090e-03
-  2.91972368e-05  4.35677518e-03  2.54926093e-02  3.56991113e-01
-  0.00000000e+00  4.38209920e-02  2.67519393e-02  1.94066006e-02
-  3.52507396e-02  9.13841081e-05  3.45452848e-02  9.27570718e-03
-  8.67142706e-01  0.00000000e+00  2.23729157e-02  1.34131927e-02
-  1.50097284e-02  9.27476481e-03 -4.87292988e-04  8.83061573e-03
-  1.35423000e-02  4.21120863e-01  0.00000000e+00  1.49549846e-02
-  8.95837170e-03  1.02428690e-02  3.70974367e-03  8.63321678e-05
-  3.80296545e-03  1.11520191e-02  3.26991207e-01  0.00000000e+00
-  4.26058712e-02  2.58258056e-02  1.75734110e-02  3.62848420e-02
-  5.55038464e-04  3.50793990e-02  7.30531730e-03  8.35520105e-01
-  0.00000000e+00  1.48660486e-02  8.95036835e-03  9.96263886e-03
-  4.81100437e-03 -4.97779422e-05  4.84922797e-03  1.00168207e-02
-  6.67079520e-01  0.00000000e+00  3.05811410e-02  1.81291235e-02
-  1.35250294e-02  2.35798305e-02 -1.06096226e-04  2.37539365e-02
-  6.82720443e-03  7.05013333e-02  0.00000000e+00  9.97877681e-02
-  5.71429634e-02  9.93251430e-03  9.43035288e-02 -2.15592232e-04
-  9.86776488e-02  1.11011933e-03  3.53888733e-03  0.00000000e+00
-  6.15493679e-02  3.69277996e-02  4.30480571e-02  2.30142933e-02
-  3.82434298e-04  2.36635998e-02  3.78857681e-02  4.78877653e-01
-  0.00000000e+00  4.07323827e-02  2.42627809e-02  3.03729349e-02
-  1.75768508e-03 -1.89331202e-04  1.56989951e-03  3.91624832e-02
-  2.94759703e-01  0.00000000e+00  3.89312610e-02  2.37273964e-02
-  3.48261445e-02  2.14988488e-04  4.55482200e-05  1.69417160e-04
-  3.87618438e-02  8.72129781e-01  0.00000000e+00  6.17359291e-01
-  2.93932853e-01  1.08930483e-01  4.64730175e-01  4.39776373e-04
-  5.92024459e-01  2.53348322e-02  3.59865231e-02  0.00000000e+00
-  3.11147546e-01  2.11229224e-01  2.60957183e-01  1.12686222e-01
-  8.45532816e-03  9.81137169e-02  2.13033829e-01  8.41486709e-01
-  0.00000000e+00  9.61773087e-02  5.59225605e-02  4.42007214e-02
-  6.75355700e-02  1.80191261e-03  7.16702268e-02  2.45070819e-02
-  1.50546410e-01  0.00000000e+00  1.23761654e-01  7.29214118e-02
-  9.68913447e-02  3.62457326e-02  1.29941148e-04  3.54667798e-02
-  8.82948742e-02  3.34199130e-01  0.00000000e+00  1.62919592e-01
-  9.78764618e-02  1.22212154e-01  7.26450577e-02 -1.41299781e-03
-  7.39357846e-02  8.75708093e-02  5.42211975e-01  0.00000000e+00
-  7.45248895e-02  4.52017387e-02  4.64108595e-02  4.12455257e-02
- -2.27759272e-03  4.26840965e-02  3.18407930e-02  6.25823123e-01
-  0.00000000e+00  5.01099799e-02  3.03195942e-02  3.68273961e-02
-  2.44820439e-03  2.83362114e-04  2.16184786e-03  4.79481321e-02
-  6.44204942e-01  0.00000000e+00  1.76503480e-01  1.13815750e-01
-  6.65450214e-02  1.67104324e-01  1.12708932e-03  1.52761574e-01
-  2.37419066e-02  8.73218209e-01  0.00000000e+00  1.57850455e-01
-  9.26514801e-02  1.13630263e-01  1.22445001e-03  7.43594102e-05
-  1.14934127e-03  1.56701114e-01  3.40320281e-01  0.00000000e+00
-  7.19979354e-02  4.34659656e-02  5.21177072e-02  2.21448508e-03
-  1.25191284e-03  3.46885170e-03  6.85290837e-02  5.66441411e-01
-  0.00000000e+00  9.19313837e-02  5.28749679e-02  4.98083731e-02
-  5.90770239e-02  8.43358015e-05  6.09412847e-02  3.09900990e-02
-  1.22037653e-02  0.00000000e+00  1.02696046e-01  6.47826521e-02
-  3.54393880e-02  9.57832377e-02  1.74497187e-04  9.11645446e-02
-  1.15315016e-02  9.58084134e-01  0.00000000e+00  5.61199048e-02
-  3.44009941e-02  2.49703201e-02  4.84447086e-02  3.01829683e-03
-  4.42716886e-02  1.18482162e-02  8.56546369e-01  0.00000000e+00
-  5.32228122e-02  3.18107827e-02  3.69621168e-02  8.01155994e-03
-  5.85698106e-04  8.62943647e-03  4.45933758e-02  4.05350998e-01
-  0.00000000e+00  2.15145177e-02  1.30245089e-02  1.62742830e-02
-  5.28121136e-03 -8.77263769e-04  6.14455405e-03  1.53699637e-02
-  8.68350803e-01  0.00000000e+00  5.05633636e-02  2.96374579e-02
-  2.35973846e-02  3.74133767e-02  4.55768528e-04  3.85778362e-02
-  1.19855274e-02  9.46606724e-03  0.00000000e+00  5.63840947e-02
-  3.33798150e-02  3.34520599e-02  3.58132408e-02 -4.07618484e-04
-  3.60546411e-02  1.99614159e-02  3.55645082e-01  0.00000000e+00
-  5.57884077e-02  3.26136331e-02  7.71543102e-03  5.26502133e-02
-  5.79304149e-04  5.46401883e-02  1.14821941e-03  5.92355248e-03
-  0.00000000e+00  9.54862414e-02  5.94218027e-02  4.00815346e-02
-  8.22684486e-02  5.43653418e-04  7.84316689e-02  1.70545725e-02
-  8.57720697e-01  0.00000000e+00  2.02454145e-02  1.21577151e-02
-  1.43197749e-02  1.36810741e-03  1.18759225e-04  1.24841275e-03
-  1.89970017e-02  4.94675292e-01  0.00000000e+00  6.20877978e-02
-  3.84604802e-02  4.87031762e-02  2.57778032e-02 -2.00581227e-04
-  2.56489734e-02  3.64388244e-02  9.85866990e-01  0.00000000e+00
-  7.24692836e-02  4.32326577e-02  5.50895288e-02  2.78887560e-02
-  0.00000000e+00  2.75034548e-02  4.49658288e-02  4.01572960e-01
-  0.00000000e+00  4.89923950e-02  2.89772392e-02  3.65664667e-02
-  8.90628383e-03  5.60189477e-04  9.50625226e-03  3.94861427e-02
-  1.82037110e-01  0.00000000e+00  2.65697886e-02  1.61453720e-02
-  1.38432176e-02  1.97258038e-02  7.27424183e-04  1.88050990e-02
-  7.76468969e-03  9.37379581e-01  0.00000000e+00  2.46622989e-02
-  1.47933610e-02  1.67767982e-02  1.11868608e-02 -7.34744665e-04
-  1.05149231e-02  1.41473759e-02  4.48996965e-01  0.00000000e+00
-  6.72313405e-02  4.17978961e-02  7.27511817e-03  6.83840155e-02
- -4.23498691e-04  6.65217268e-02  7.09613790e-04  1.00000000e+00
-  0.00000000e+00  4.05808633e-02  2.40200436e-02  2.87843914e-02
-  1.32013831e-02  2.59571539e-04  1.35484777e-02  2.70323856e-02
-  1.36321339e-01  0.00000000e+00  2.76677447e-02  1.67989744e-02
-  1.27991081e-02  2.17346261e-02  3.91139046e-04  2.11089920e-02
-  6.55875268e-03  8.90965792e-01  0.00000000e+00  2.22339109e-02
-  1.34302943e-02  1.93488183e-02  4.37399798e-03  5.29667003e-04
-  4.91324488e-03  1.73206660e-02  7.57573661e-01  0.00000000e+00
-  7.30232075e-02  4.27061128e-02  2.56072816e-02  6.16526462e-02
-  2.51412998e-04  6.38442505e-02  9.17895698e-03  1.25699176e-01
-  0.00000000e+00  1.98494355e-02  1.19230831e-02  1.40594483e-02
-  9.34113613e-04  2.83895912e-04  1.21844594e-03  1.86309896e-02
-  5.07988653e-01  0.00000000e+00  4.43071401e-02  2.66348271e-02
-  3.08453405e-02  1.61980943e-02 -1.45620908e-04  1.62132316e-02
-  2.80939085e-02  5.18062994e-01  0.00000000e+00  4.42411056e-02
-  2.62008186e-02  3.37862051e-02  1.82479034e-02 -7.99863781e-04
-  1.76155499e-02  2.58256919e-02  5.94497091e-01  0.00000000e+00
-  2.40756419e-02  1.43885928e-02  1.82440682e-02  3.81350856e-04
- -2.56613507e-04  1.24810073e-04  2.39508318e-02  2.95056894e-01
-  0.00000000e+00  4.44530014e-02  2.61539413e-02  2.34725191e-02
-  2.97129371e-02  4.71806267e-04  3.06305774e-02  1.38224240e-02
-  2.94891979e-02  0.00000000e+00  8.13491945e-02  5.08256128e-02
-  3.51490041e-02  6.90291127e-02 -2.32655230e-04  6.69331464e-02
-  1.44160481e-02  9.69519652e-01  0.00000000e+00  1.64667468e-02
-  9.87202072e-03  1.14533989e-02  2.90152110e-03 -3.54366267e-05
-  2.87029796e-03  1.35964488e-02  3.92401519e-01  0.00000000e+00
-  2.48991200e-02  1.51168312e-02  7.20748225e-03  2.25009020e-02
- -5.36407562e-04  2.27860523e-02  2.11306769e-03  9.31981961e-01
-  0.00000000e+00  1.57825262e-02  9.43347831e-03  8.63093904e-03
-  9.44698796e-03  4.53071603e-04  9.94482320e-03  5.83770297e-03
-  1.97150369e-01  0.00000000e+00  5.88186630e-02  3.45510576e-02
-  2.67466667e-02  4.37078926e-02 -3.70718529e-04  4.43064339e-02
-  1.45122291e-02  1.14765291e-01  0.00000000e+00  1.45500976e-02
-  8.73308037e-03  1.03194872e-02  2.37642848e-04 -3.16019514e-04
-  7.83484265e-05  1.44717492e-02  4.58307320e-01  0.00000000e+00
-  3.90720635e-02  2.38379593e-02  1.46013508e-02  3.38498125e-02
- -1.24039168e-04  3.34073566e-02  5.66470690e-03  8.96944072e-01
-  0.00000000e+00  5.52093720e-02  3.38163892e-02  2.62722462e-02
-  4.29733472e-02  5.51653396e-04  4.15114252e-02  1.36979468e-02
-  8.48703084e-01  0.00000000e+00  1.91329742e-02  1.12056766e-02
-  7.58118553e-03  1.61780845e-02  5.90264833e-04  1.54576573e-02
-  3.08505200e-03  8.33624529e-01  0.00000000e+00  1.58114158e-02
-  9.48141355e-03  1.16968974e-02  2.51773978e-03 -5.52143041e-05
-  2.56978724e-03  1.32416286e-02  4.03234229e-01  0.00000000e+00
-  1.81235587e-02  1.09543091e-02  7.99943802e-03  1.44176361e-02
-  2.64490251e-05  1.42877506e-02  3.83580801e-03  8.51084356e-01
-  0.00000000e+00  1.49035498e-02  9.01786107e-03  0.00000000e+00
-  1.49573560e-02 -5.74993747e-05  1.49035498e-02  0.00000000e+00
-  1.00000000e+00  0.00000000e+00  1.07237191e-02  6.46880826e-03
-  9.26255244e-03  1.46866263e-03  1.75372147e-04  1.29221253e-03
-  9.43150654e-03  9.10789689e-01  0.00000000e+00  1.23360969e-01
-  7.83966160e-02  3.67183038e-02  1.19841406e-01 -3.93352924e-05
-  1.12978228e-01  1.03827418e-02  9.34866426e-01  0.00000000e+00
-  1.04797471e-01  6.06890467e-02  8.08996063e-02  1.63219782e-02
- -3.88998460e-04  1.60669109e-02  8.87305601e-02  1.38085306e-01
-  0.00000000e+00  4.39345720e-02  2.57854018e-02  2.96597192e-02
-  2.35369104e-02  1.60506376e-03  2.16570141e-02  2.12386179e-02
-  5.18074610e-01  0.00000000e+00]
-[0.02178552 0.03785454 0.03499315 0.02283531 0.04798502 0.08585039
- 0.023324   0.03473237 0.13709623 0.07662905 0.04318881 0.05538318
- 0.05529575 0.05300378 0.03236753 0.04895759 0.0345107  0.03046795
- 0.03755051 0.0754602 ]
-"""

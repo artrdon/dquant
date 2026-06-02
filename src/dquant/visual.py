@@ -269,7 +269,7 @@ class Visualization:
         }
 
         fig.savefig(filename, **save_kwargs)
-        print(f"График сохранен как {filename}")
+        print(f"The graph saved as {filename}")
 
     def show_vol(self, df, pred, save_path=None):
         fig, ax = self.__create_figure(figsize=(15, 6))
@@ -299,9 +299,9 @@ class Visualization:
 
         ax.set_xlim(-1, len(df))
         ax.set_ylim(0, max_bar_height * 1.3)
-        ax.set_xlabel('Время')
+        ax.set_xlabel('Time')
         ax.set_ylabel('')
-        ax.set_title('Объемный график')
+        ax.set_title('Volumetric graph')
 
         self.__style_axes(ax)
 
@@ -315,10 +315,8 @@ class Visualization:
         plt.show()
 
     def forward_validation_errors(self, mse_errors, r2_errors, save_path=None):
-        # Первый график - MSE Loss
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
 
-        # Первый график - MSE Loss
         ax1.plot(list(mse_errors), label='Train Loss',
                  color=self.config['colors']['primary'])
         ax1.set_xlabel('Trees')
@@ -329,7 +327,6 @@ class Visualization:
         self.__style_axes(ax1)
         self.__style_legend(ax1)
 
-        # Второй график - R² Score
         ax2.plot(list(r2_errors), label='Train R²',
                  color=self.config['colors']['primary'])
 
@@ -350,10 +347,8 @@ class Visualization:
 
 
     def show_errors(self, train_errors, val_errors, train_r2, val_r2, save_path=None):
-        # Первый график - MSE Loss
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
 
-        # Первый график - MSE Loss
         ax1.plot(list(train_errors), label='Train Loss',
                  color=self.config['colors']['primary'])
         ax1.plot(list(val_errors), label='Validation Loss',
@@ -366,7 +361,6 @@ class Visualization:
         self.__style_axes(ax1)
         self.__style_legend(ax1)
 
-        # Второй график - R² Score
         ax2.plot(list(train_r2), label='Train R²',
                  color=self.config['colors']['primary'])
         ax2.plot(list(val_r2), label='Validation R²',
