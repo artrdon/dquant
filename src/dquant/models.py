@@ -12,7 +12,7 @@ import numpy as np
 import xgboost
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 from .metrics import qlike_score
 from sklearn.preprocessing import StandardScaler
 from typing import Tuple
@@ -72,9 +72,9 @@ class FichEn:
         raw_windows_X = []
         raw_windows_y = []
 
-        for i in range(window_in + 1, len(data) - window_out + 1):
+        for i in range(window_in + 1, len(data) - (window_out + 2)):
             x_window = data.iloc[i - window_in: i]
-            y_window = data.iloc[i - 1: i + window_out]
+            y_window = data.iloc[i: i + window_out+1]
 
             raw_windows_X.append(x_window)
             raw_windows_y.append(y_window)
@@ -563,12 +563,15 @@ class FichEn:
 
         self.train_errors = []
         self.val_errors = []
+        self.train_mae = []
+        self.val_mae = []
         self.train_qlike = []
         self.val_qlike = []
         self.train_r2 = []
         self.val_r2 = []
 
         self.best_val_error = float('inf')
+        self.best_val_mae = float('inf')
         self.best_val_qlike = float('inf')
         self.best_r2 = -float('inf')
         self.patience_counter = 0
@@ -581,6 +584,8 @@ class FichEn:
                 self.dquantprint(f'{i} trees')
                 t_error = 0
                 v_error = 0
+                t_mae = 0
+                v_mae = 0
                 t_qlike = 0
                 v_qlike = 0
                 t_r2 = 0
@@ -618,6 +623,8 @@ class FichEn:
                         if i != 1:
                             t_error += mean_squared_error(y_h_clean, self.models[h_idx].predict(X_h))
                             v_error += mean_squared_error(y_h_v_clean, self.models[h_idx].predict(X_h_v))
+                            t_mae += mean_absolute_error(y_h_clean, self.models[h_idx].predict(X_h))
+                            v_mae += mean_absolute_error(y_h_v_clean, self.models[h_idx].predict(X_h_v))
                             t_qlike += qlike_score(y_h_clean, self.models[h_idx].predict(X_h))
                             v_qlike += qlike_score(y_h_v_clean, self.models[h_idx].predict(X_h_v))
                             t_r2 += r2_score(y_h_clean, self.models[h_idx].predict(X_h))
@@ -625,6 +632,8 @@ class FichEn:
                         else:
                             t_error += mean_squared_error(y_h_clean, model.predict(X_h))
                             v_error += mean_squared_error(y_h_v_clean, model.predict(X_h_v))
+                            t_mae += mean_absolute_error(y_h_clean, model.predict(X_h))
+                            v_mae += mean_absolute_error(y_h_v_clean, model.predict(X_h_v))
                             t_qlike += qlike_score(y_h_clean, model.predict(X_h))
                             v_qlike += qlike_score(y_h_v_clean, model.predict(X_h_v))
                             t_r2 += r2_score(y_h_clean, model.predict(X_h))
@@ -633,6 +642,8 @@ class FichEn:
 
                 var_test_error = float(t_error)/horizon
                 var_val_error = float(v_error)/horizon
+                var_test_mae = float(t_mae) / horizon
+                var_val_mae = float(v_mae) / horizon
                 var_test_qlike = float(t_qlike) / horizon
                 var_val_qlike = float(v_qlike) / horizon
                 var_test_r2 = float(t_r2)/horizon
@@ -640,10 +651,20 @@ class FichEn:
 
                 if self.early_stopping:
                     if len(self.val_errors) > 0:
-                        current_min = min(self.val_errors)
-                        best_so_far = min(self.best_val_error, current_min)
-
-                        no_improvement_count = len(self.val_errors) - self.val_errors.index(best_so_far) - 1
+                        if self.loss == "MAE":
+                            current_min = min(self.val_mae)
+                            best_so_far = min(self.best_val_mae, current_min)
+                            no_improvement_count = len(self.val_mae) - self.val_mae.index(best_so_far) - 1
+                        elif self.loss == "MSE":
+                            current_min = min(self.val_errors)
+                            best_so_far = min(self.best_val_error, current_min)
+                            no_improvement_count = len(self.val_errors) - self.val_errors.index(best_so_far) - 1
+                        elif self.loss == "QLIKE":
+                            current_min = min(self.val_qlike)
+                            best_so_far = min(self.best_val_qlike, current_min)
+                            no_improvement_count = len(self.val_qlike) - self.val_qlike.index(best_so_far) - 1
+                        else:
+                            raise "Unavailable loss function"
 
                         if no_improvement_count >= self.patience:
                             self.dquantprint(f'Early stopping at {i} trees (no improvement for {self.patience} steps)')
@@ -655,6 +676,8 @@ class FichEn:
 
                 self.train_errors.append(var_test_error)
                 self.val_errors.append(var_val_error)
+                self.train_mae.append(var_test_mae)
+                self.val_mae.append(var_val_mae)
                 self.train_qlike.append(var_test_qlike)
                 self.val_qlike.append(var_val_qlike)
                 self.train_r2.append(var_test_r2)
@@ -663,6 +686,8 @@ class FichEn:
                 self.dquantprint('Validation QLIKE: ', var_val_qlike)
                 self.dquantprint('Train MSE:        ', var_test_error)
                 self.dquantprint('Validation MSE:   ', var_val_error)
+                self.dquantprint('Train MAE:        ', var_test_mae)
+                self.dquantprint('Validation MAE:   ', var_val_mae)
                 self.dquantprint('Train r2:         ', var_test_r2)
                 self.dquantprint('Validation r2:    ', var_val_r2)
                 self.dquantprint(f"{time.time() - start} seconds spent")
@@ -1439,7 +1464,8 @@ class FichEn:
 
 
 class VolClustGB(FichEn):
-    def __init__(self, sett, early_stopping=True, output=True):
+    def __init__(self, sett, early_stopping=True, output=True, loss="MAE"):
+        self.loss = loss
         self.output = output
         self.models = []
         self.scaler = StandardScaler()
@@ -1462,7 +1488,8 @@ class VolClustGB(FichEn):
         }
         self.meta = {
             "model_type": "gb",
-            "model_settings": self.default_sett
+            "model_settings": self.default_sett,
+            "model_loss": loss
         }
         if sett == {}:
             self.base_model = GradientBoostingRegressor(**self.default_sett)
@@ -1599,7 +1626,8 @@ class VolClustGB(FichEn):
 
 
 class VolClustXGB(FichEn):
-    def __init__(self, sett, early_stopping=True, output=True, qlike=True):
+    def __init__(self, sett, early_stopping=True, output=True, loss="QLIKE"):
+        self.loss = loss
         self.output = output
         self.models = []
         self.scaler = StandardScaler()
@@ -1623,15 +1651,18 @@ class VolClustXGB(FichEn):
             'device': 'cpu'
         }
 
-        if qlike == False:
+        if loss == "MSE":
             self.default_sett['objective'] = 'reg:squarederror'
+        elif loss == "MAE":
+            self.default_sett['objective'] = 'reg:absoluteerror'
 
         self.meta = {
             "model_type": "xgb",
-            "model_settings": self.default_sett
+            "model_settings": self.default_sett,
+            "model_loss": loss
         }
         if sett == {}:
-            if qlike:
+            if loss == "QLIKE":
                 self.base_model = xgboost.XGBRegressor(**self.default_sett, objective=self.qlike_obj)
             else:
                 self.base_model = xgboost.XGBRegressor(**self.default_sett)
@@ -1640,7 +1671,7 @@ class VolClustXGB(FichEn):
                 if sett['objective']: del sett['objective']
             except KeyError:
                 pass
-            if qlike:
+            if loss == "QLIKE":
                 self.base_model = xgboost.XGBRegressor(**sett, objective=self.qlike_obj)
             else:
                 self.base_model = xgboost.XGBRegressor(**sett)
@@ -1772,7 +1803,8 @@ class VolClustXGB(FichEn):
 
 
 class VolClustLightGBM(FichEn):
-    def __init__(self, sett, early_stopping=True, output=True, qlike=True):
+    def __init__(self, sett, early_stopping=True, output=True, loss="QLIKE"):
+        self.loss = loss
         self.output = output
         self.models = []
         self.scaler = StandardScaler()
@@ -1798,15 +1830,18 @@ class VolClustLightGBM(FichEn):
             'boosting_type': 'gbdt'
         }
 
-        if qlike == False:
-            self.default_sett['objective'] = 'regression'
+        if loss == "MSE":
+            self.default_sett['objective'] = 'mse'
+        elif loss == "MAE":
+            self.default_sett['objective'] = 'mae'
 
         self.meta = {
             "model_type": "lgbm",
-            "model_settings": self.default_sett
+            "model_settings": self.default_sett,
+            "models_loss": loss
         }
         if sett == {}:
-            if qlike:
+            if loss == "QLIKE":
                 self.base_model = lgb.LGBMRegressor(**self.default_sett, objective=self.qlike_obj)
             else:
                 self.base_model = lgb.LGBMRegressor(**self.default_sett)
@@ -1815,7 +1850,7 @@ class VolClustLightGBM(FichEn):
                 if sett['objective']: del sett['objective']
             except KeyError:
                 pass
-            if qlike:
+            if loss == "QLIKE":
                 self.base_model = lgb.LGBMRegressor(**sett, objective=self.qlike_obj)
             else:
                 self.base_model = lgb.LGBMRegressor(**sett)
