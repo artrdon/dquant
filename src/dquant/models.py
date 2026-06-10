@@ -605,6 +605,7 @@ class FichEn:
                         valid_mask = ~pd.isna(y_h) if hasattr(y_h, 'isna') else ~np.isnan(y_h)
                         X_h = X_scaled[valid_mask]
                         y_h_clean = y_h[valid_mask]
+                        y_h_clean_orig = self.scaler_y.inverse_transform(y_h_clean.reshape(-1, 1)).ravel()
 
                         if i != 1:
                             self.models[h_idx].set_params(n_estimators=i)
@@ -620,24 +621,33 @@ class FichEn:
                         valid_mask = ~pd.isna(y_h_v) if hasattr(y_h_v, 'isna') else ~np.isnan(y_h_v)
                         X_h_v = X_test_scaled[valid_mask]
                         y_h_v_clean = y_h_v[valid_mask]
+                        y_h_v_clean_orig = self.scaler_y.inverse_transform(y_h_v_clean.reshape(-1, 1)).ravel()
                         if i != 1:
-                            t_error += mean_squared_error(y_h_clean, self.models[h_idx].predict(X_h))
-                            v_error += mean_squared_error(y_h_v_clean, self.models[h_idx].predict(X_h_v))
-                            t_mae += mean_absolute_error(y_h_clean, self.models[h_idx].predict(X_h))
-                            v_mae += mean_absolute_error(y_h_v_clean, self.models[h_idx].predict(X_h_v))
-                            t_qlike += qlike_score(y_h_clean, self.models[h_idx].predict(X_h))
-                            v_qlike += qlike_score(y_h_v_clean, self.models[h_idx].predict(X_h_v))
-                            t_r2 += r2_score(y_h_clean, self.models[h_idx].predict(X_h))
-                            v_r2 += r2_score(y_h_v_clean, self.models[h_idx].predict(X_h_v))
+                            pred_train = self.models[h_idx].predict(X_h)
+                            pred_val = self.models[h_idx].predict(X_h_v)
+                            pred_train_orig = self.scaler_y.inverse_transform(pred_train.reshape(-1, 1)).ravel()
+                            pred_val_orig = self.scaler_y.inverse_transform(pred_val.reshape(-1, 1)).ravel()
+                            t_error += mean_squared_error(y_h_clean, pred_train)
+                            v_error += mean_squared_error(y_h_v_clean, pred_val)
+                            t_mae += mean_absolute_error(y_h_clean, pred_train)
+                            v_mae += mean_absolute_error(y_h_v_clean, pred_val)
+                            t_qlike += qlike_score(y_h_clean_orig, pred_train_orig)
+                            v_qlike += qlike_score(y_h_v_clean_orig, pred_val_orig)
+                            t_r2 += r2_score(y_h_clean, pred_train)
+                            v_r2 += r2_score(y_h_v_clean, pred_val)
                         else:
-                            t_error += mean_squared_error(y_h_clean, model.predict(X_h))
-                            v_error += mean_squared_error(y_h_v_clean, model.predict(X_h_v))
-                            t_mae += mean_absolute_error(y_h_clean, model.predict(X_h))
-                            v_mae += mean_absolute_error(y_h_v_clean, model.predict(X_h_v))
-                            t_qlike += qlike_score(y_h_clean, model.predict(X_h))
-                            v_qlike += qlike_score(y_h_v_clean, model.predict(X_h_v))
-                            t_r2 += r2_score(y_h_clean, model.predict(X_h))
-                            v_r2 += r2_score(y_h_v_clean, model.predict(X_h_v))
+                            pred_train = model.predict(X_h)
+                            pred_val = model.predict(X_h_v)
+                            pred_train_orig = self.scaler_y.inverse_transform(pred_train.reshape(-1, 1)).ravel()
+                            pred_val_orig = self.scaler_y.inverse_transform(pred_val.reshape(-1, 1)).ravel()
+                            t_error += mean_squared_error(y_h_clean, pred_train)
+                            v_error += mean_squared_error(y_h_v_clean, pred_val)
+                            t_mae += mean_absolute_error(y_h_clean, pred_train)
+                            v_mae += mean_absolute_error(y_h_v_clean, pred_val)
+                            t_qlike += qlike_score(y_h_clean_orig, pred_train_orig)
+                            v_qlike += qlike_score(y_h_v_clean_orig, pred_val_orig)
+                            t_r2 += r2_score(y_h_clean, pred_train)
+                            v_r2 += r2_score(y_h_v_clean, pred_val)
 
 
                 var_test_error = float(t_error)/horizon
